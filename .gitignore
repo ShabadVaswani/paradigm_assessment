@@ -1,0 +1,6 @@
+# Handbook PDF (50 MB) and everything derived from it; the notebook downloads it.
+data/
+
+.venv/
+__pycache__/
+.ipynb_checkpoints/
