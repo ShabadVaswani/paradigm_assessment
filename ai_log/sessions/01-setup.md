@@ -31,4 +31,4 @@ Set up how AI use gets recorded in this project, starting from a clean repo.
 
 ## What the AI got wrong
 
-- Nothing so far.
+- In the first two commits it left a blank line between `AI-assisted: yes` and `Co-Authored-By:`. Git reads trailers only from the last paragraph, so it didn't see `AI-assisted` as a trailer. The AI caught this by checking `git log` for the trailer right after committing, and found it empty. Neither commit had been pushed, so it recreated both with the trailers in one block. Later commits use that format.
