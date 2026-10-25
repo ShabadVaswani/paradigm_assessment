@@ -1,10 +1,11 @@
 """Build the retrieval data from the handbook PDF.
 
-    python -m handbook_qa.ingest all            # download, extract, describe images (Claude API), chunk
+    python -m handbook_qa.ingest all            # download, extract, describe images (Claude API), chunk, embed
     python -m handbook_qa.ingest download
     python -m handbook_qa.ingest extract        # PDF -> articles.json, rendered images, images.jsonl
     python -m handbook_qa.ingest describe       # describe new/changed images with Claude (key from Key Vault)
     python -m handbook_qa.ingest chunk          # articles + image descriptions -> chunks.jsonl, images.jsonl
+    python -m handbook_qa.ingest embed          # embed new/changed chunks and images locally (nomic, CPU)
 
 Describing images without the API (e.g. with Claude Code subagents):
     python -m handbook_qa.ingest image-tasks DIR
@@ -71,6 +72,15 @@ def chunk(settings: Settings) -> None:
              "(%(described)d images described, %(undescribed)d without a description)", stats)
 
 
+def embed(settings: Settings) -> None:
+    from .embeddings import embed_items
+    from .retrieval import load_corpus
+
+    items = load_corpus(settings.paths.chunks, settings.paths.image_index)
+    stats = embed_items([(item.id, item.text) for item in items], settings.paths.vectors, settings.embed)
+    log.info("Vectors up to date: %(embedded)d embedded now, %(reused)d reused", stats)
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="python -m handbook_qa.ingest", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -81,6 +91,7 @@ def main(argv: list[str] | None = None) -> None:
     p = sub.add_parser("describe")
     p.add_argument("--force", action="store_true", help="describe every image again, ignoring the cache")
     sub.add_parser("chunk")
+    sub.add_parser("embed")
     p = sub.add_parser("image-tasks")
     p.add_argument("out_dir", type=Path)
     p.add_argument("--force", action="store_true")
@@ -90,7 +101,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--model", required=True)
     args = parser.parse_args(argv)
 
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
     settings = load_settings()
     if args.command in ("all", "download"):
         download(settings)
@@ -100,6 +111,8 @@ def main(argv: list[str] | None = None) -> None:
         describe(settings, force=getattr(args, "force", False))
     if args.command in ("all", "chunk"):
         chunk(settings)
+    if args.command in ("all", "embed"):
+        embed(settings)
     if args.command == "image-tasks":
         from .describe import write_tasks
         from .images import load_image_index
