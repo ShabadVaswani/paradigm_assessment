@@ -50,3 +50,36 @@ Turn the handbook PDF into retrieval data: chunks of a sensible size that follow
 - Two of the six subagents described some images without reading the surrounding text: one image in one batch, eight in another, against the instructions. Both said so in their reports. The AI sent them back to redo those images with the context, and they did. Their first attempt to read the task files with Python had failed on Windows text encoding.
 - The subagents shared one scratch folder. One agent's helper script overwrote another's, and one agent ran the other's script, rewriting some of the other batch's result files. The agent reported this. Before importing, the AI checked every caption against the section its image sits in, and looked at one of the affected images (p866) and its description directly. All matched.
 - Noted, not yet handled: some dollar amounts in the PDF were rendered as maths and lost their spaces, e.g. on p21 "$50,000 per year - they only need to register once…" became "50, 000peryear − theyonlyneedtoregisteronce…".
+
+## Continued (2026-10-25): embeddings and retrieval
+
+### Key prompt
+
+> use nomic embed text v.1.5 model for both chunks and questions, embed everything locally, do it in small batches as pc can be fragile, save the vectors to a file in the repo so chunks are only embedded once
+> for retrieval for now use cosine similarity in memory and use keyword search, bm25, merge the two lists then, no vector database is required as number of chunks is low, exact search is enough
+
+### What the AI did / proposed
+
+- Checked the machine first: 12-core CPU, 31 GB RAM but only 3.8 GB free, plus an NVIDIA GPU. Because of the low free memory it chose fastembed (ONNX Runtime) over sentence-transformers / PyTorch, pinned to the CPU with 4 threads and batches of 8 (decision 10).
+- Checked how fastembed handles this model before trusting it. It uses mean pooling (what nomic specifies) without normalising, so the code normalises. Truncation is at the model's 8,192-token limit; the longest chunk is 893 tokens.
+- Trial on 16 chunks:
+  - The model loaded in 20 s.
+  - Each batch of 8 took about 10 s.
+  - Memory peaked at 1.9 GB.
+  - A sample question scored 0.81 cosine against the right chunk and 0.52 against an unrelated one.
+- Added `embeddings.py`:
+  - Vectors are stored in `artifacts/embeddings/nomic-embed-text-v1.5.npz` with a text hash per item, and only new or changed text is embedded.
+  - The file is saved atomically after every batch, so a crashed run resumes.
+- Ran the full embedding (936 items: 859 chunks + 77 image records) as a process detached from the Claude session, with a timestamped log. It ran 18:20–18:40, all 117 batches, and free RAM stayed around 2.6 GB. Afterwards it checked the store (936 unique ids, all unit vectors) and that a rerun embeds nothing ("0 embedded now, 936 reused").
+- Added `retrieval.py`: exact cosine and BM25 (its own ~30-line implementation), merged with reciprocal rank fusion, searching chunks and images together. Also `search.py` for trying queries from the command line (decision 11).
+- Ran a spot-check of 11 hand-written questions. It's a sanity check, not an eval. For all 9 with a known expected source, that source was in the top 3. The two image-only facts (communication tier list, codespace machine sizes) were found at rank 1, through the image records.
+- Tests: 32 pass. New ones cover the tokenizer, BM25, RRF, hybrid search on toy data, and "only embed new or changed text".
+
+### Accepted / rejected
+
+- I specified the model, local embedding in small batches, committed vectors, cosine + BM25 with no vector database. The AI chose fastembed/ONNX, 4 threads × batches of 8, RRF for the merge, and the BM25 details. I haven't commented on those yet.
+
+### What the AI got wrong, and how it was caught
+
+- One of its own unit tests for RRF asserted that two items with identical fused scores differed. The test failed; the maths was right and the test was wrong, so it fixed the test.
+- When writing the spot-check it assumed the "spending company money" article wasn't in the PDF, because a `grep | head -20` it used to list chunk ids had cut the output short. The spot-check itself showed `people/spending-money` at rank 1.

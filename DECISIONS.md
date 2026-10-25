@@ -79,3 +79,27 @@ One entry per design choice: the options considered, the evidence, what I chose,
 - **Evidence:** no API key is connected yet.
 - **Chosen:** my instruction: use our own Sonnet agents now, write the API code (key from Azure Key Vault) and verify it once the key is connected.
 - **AI suggested:** the agents get exactly the prompt the API would get (`python -m handbook_qa.ingest image-tasks`), and their answers go through the same schema validation (`import-descriptions`), labelled `source: claude-code-subagent`. When the API runs, we can compare its descriptions with the agents'. The client supports both the Claude API (`LLM_PROVIDER=anthropic`) and Claude on Microsoft Foundry (`foundry`), because "Azure" could mean either; the key comes from `AZURE_KEY_VAULT_URL` + `ANTHROPIC_KEY_SECRET_NAME` via `DefaultAzureCredential`.
+
+## 10. Embed locally with nomic-embed-text-v1.5, on the CPU through ONNX, and commit the vectors (2026-10-25)
+
+- **Options for running it:** sentence-transformers (needs PyTorch and runs the model repo's own Python code via `trust_remote_code`) or fastembed (ONNX Runtime, loads the official `onnx/model.onnx` from the `nomic-ai/nomic-embed-text-v1.5` repo, no PyTorch).
+- **Evidence:** the machine had 3.8 GB of free RAM out of 31 GB. In a trial, fastembed peaked at 1.9 GB and took about 10 s per batch of 8 chunks with 4 threads. Chunks are at most 893 nomic tokens (limit 8,192), so nothing is truncated. A test question scored 0.81 against the right chunk and 0.52 against an unrelated one.
+- **Chosen:** nomic-embed-text-v1.5 for chunks and questions, embedded locally in small batches, with the vectors saved in the repo (my spec). Implementation (AI's suggestion, not overruled):
+  - fastembed on the CPU only, with 4 threads and batches of 8.
+  - nomic's `search_document:` / `search_query:` prefixes.
+  - Vectors L2-normalised and stored as float32 in `artifacts/embeddings/nomic-embed-text-v1.5.npz`, alongside each item's id and a hash of the exact text embedded.
+  - A rebuild only embeds new or changed text.
+  - The file is rewritten atomically after every batch, so a crash loses at most one batch and a rerun resumes.
+  - The full run (936 items: 859 chunks + 77 images) is launched detached from the Claude session, with a timestamped log.
+- **AI suggested:** the above. It also embeds the 77 image records (their `retrieval_text`), so images can be retrieved as items in their own right (decision 08).
+
+## 11. Retrieval: exact cosine + BM25 in memory, merged with reciprocal rank fusion (2026-10-25)
+
+- **Options:** a vector database or an approximate index; exact in-memory search. For merging the two lists: interleave them, add normalised scores, or reciprocal rank fusion (RRF).
+- **Evidence:** 936 items × 768 dimensions is 2.9 MB. An exact search is one matrix product, so an index would add nothing but a dependency.
+- **Chosen:** exact cosine similarity and BM25 in memory, no vector database (my spec). Both lists are merged with RRF (k = 60, top 50 candidates from each list), which was the AI's suggestion.
+- **AI suggested:**
+  - RRF, because it uses ranks only: cosine scores (about 0.4–0.9) and BM25 scores (unbounded) can't be compared directly.
+  - BM25 written in ~30 lines rather than adding a library: Okapi k1 = 1.5, b = 0.75.
+  - A plain tokenizer: lowercase words, a short stopword list, and a light plural strip ("refunds" → "refund"). There's no stemmer yet.
+  - Images are searched as their own items alongside chunks. Results say which kind each hit is.
