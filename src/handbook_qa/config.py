@@ -26,6 +26,23 @@ class Paths:
     chunks: Path = ROOT / "data" / "build" / "chunks.jsonl"
     # Image descriptions cost money to produce, so they are committed and reused.
     image_descriptions: Path = ROOT / "artifacts" / "image_descriptions.jsonl"
+    # Embedding is slow on a laptop CPU, so vectors are committed too; only changed text is embedded again.
+    vectors: Path = ROOT / "artifacts" / "embeddings" / "nomic-embed-text-v1.5.npz"
+
+
+@dataclass(frozen=True)
+class EmbedSettings:
+    model_cache: Path = ROOT / "data" / "models"
+    batch_size: int = int(_env("EMBED_BATCH_SIZE", "8"))
+    threads: int = int(_env("EMBED_THREADS", "4"))
+    pause_seconds: float = float(_env("EMBED_PAUSE_SECONDS", "0"))
+
+
+@dataclass(frozen=True)
+class RetrievalSettings:
+    top_k: int = int(_env("RETRIEVAL_TOP_K", "8"))
+    candidates: int = int(_env("RETRIEVAL_CANDIDATES", "50"))  # from each of dense and BM25 before fusing
+    rrf_k: int = int(_env("RETRIEVAL_RRF_K", "60"))
 
 
 @dataclass(frozen=True)
@@ -54,6 +71,8 @@ class Settings:
     paths: Paths = field(default_factory=Paths)
     chunks: ChunkSettings = field(default_factory=ChunkSettings)
     llm: LLMSettings = field(default_factory=LLMSettings)
+    embed: EmbedSettings = field(default_factory=EmbedSettings)
+    retrieval: RetrievalSettings = field(default_factory=RetrievalSettings)
 
 
 def load_settings() -> Settings:
