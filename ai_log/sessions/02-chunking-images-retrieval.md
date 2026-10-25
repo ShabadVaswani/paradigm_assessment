@@ -73,7 +73,7 @@ Turn the handbook PDF into retrieval data: chunks of a sensible size that follow
 - Ran the full embedding (936 items: 859 chunks + 77 image records) as a process detached from the Claude session, with a timestamped log. It ran 18:20–18:40, all 117 batches, and free RAM stayed around 2.6 GB. Afterwards it checked the store (936 unique ids, all unit vectors) and that a rerun embeds nothing ("0 embedded now, 936 reused").
 - Added `retrieval.py`: exact cosine and BM25 (its own ~30-line implementation), merged with reciprocal rank fusion, searching chunks and images together. Also `search.py` for trying queries from the command line (decision 11).
 - Ran a spot-check of 11 hand-written questions. It's a sanity check, not an eval. For all 9 with a known expected source, that source was in the top 3. The two image-only facts (communication tier list, codespace machine sizes) were found at rank 1, through the image records.
-- Tests: 32 pass. New ones cover the tokenizer, BM25, RRF, hybrid search on toy data, and "only embed new or changed text".
+- Tests: 27 pass. New ones cover the tokenizer, BM25, RRF, hybrid search on toy data, and "only embed new or changed text".
 
 ### Accepted / rejected
 
