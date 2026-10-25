@@ -1,0 +1,60 @@
+"""Paths and settings. Everything can be overridden with environment variables."""
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+
+HANDBOOK_URL = "https://paradigmiq.box.com/shared/static/grn1axnqf50npquo07x8r6yojb29g47l.pdf"
+HANDBOOK_SHA256 = "0f81a75f987ef19e5fd18d85e1a07aa6bd7691a72a5723008f208c7cab7e2a57"
+
+
+def _env(name: str, default: str) -> str:
+    return os.environ.get(name, default)
+
+
+@dataclass(frozen=True)
+class Paths:
+    data: Path = ROOT / "data"
+    pdf: Path = ROOT / "data" / "handbook.pdf"
+    build: Path = ROOT / "data" / "build"
+    images: Path = ROOT / "data" / "build" / "images"
+    articles: Path = ROOT / "data" / "build" / "articles.json"
+    image_index: Path = ROOT / "data" / "build" / "images.jsonl"
+    chunks: Path = ROOT / "data" / "build" / "chunks.jsonl"
+    # Image descriptions cost money to produce, so they are committed and reused.
+    image_descriptions: Path = ROOT / "artifacts" / "image_descriptions.jsonl"
+
+
+@dataclass(frozen=True)
+class ChunkSettings:
+    min_tokens: int = int(_env("CHUNK_MIN_TOKENS", "400"))
+    max_tokens: int = int(_env("CHUNK_MAX_TOKENS", "800"))
+    overlap_sentences: int = int(_env("CHUNK_OVERLAP_SENTENCES", "2"))
+    overlap_max_tokens: int = int(_env("CHUNK_OVERLAP_MAX_TOKENS", "120"))
+
+
+@dataclass(frozen=True)
+class LLMSettings:
+    # "anthropic" = Claude API, "foundry" = Claude on Microsoft Foundry.
+    provider: str = _env("LLM_PROVIDER", "anthropic")
+    # When set, the API key is read from this Key Vault instead of the environment.
+    key_vault_url: str = _env("AZURE_KEY_VAULT_URL", "")
+    key_secret_name: str = _env("ANTHROPIC_KEY_SECRET_NAME", "anthropic-api-key")
+    foundry_resource: str = _env("FOUNDRY_RESOURCE", "")
+    image_model: str = _env("IMAGE_MODEL", "claude-sonnet-5-5")
+    image_effort: str = _env("IMAGE_EFFORT", "medium")
+    image_concurrency: int = int(_env("IMAGE_CONCURRENCY", "8"))
+
+
+@dataclass(frozen=True)
+class Settings:
+    paths: Paths = field(default_factory=Paths)
+    chunks: ChunkSettings = field(default_factory=ChunkSettings)
+    llm: LLMSettings = field(default_factory=LLMSettings)
+
+
+def load_settings() -> Settings:
+    return Settings()

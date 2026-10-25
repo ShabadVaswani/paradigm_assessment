@@ -1,0 +1,27 @@
+[project]
+name = "handbook-qa"
+version = "0.1.0"
+description = "Ask questions about the PostHog handbook and get answers grounded in it."
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic==2.3.0",
+    "azure-identity==1.26.0",
+    "azure-keyvault-secrets==4.11.3",
+    "pydantic==2.14.1",
+    "pymupdf==2.0",
+    "requests==2.34.2",
+    "tiktoken==0.14.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest==9.1.1"]
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
