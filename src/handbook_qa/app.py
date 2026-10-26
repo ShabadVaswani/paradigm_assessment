@@ -4,8 +4,8 @@
     python -m handbook_qa --retrieval-only   # no API key needed: shows the passages each option would use
 
 Three ways to answer (all use the same answering prompt and citation checks; only the context differs):
-1. Simple RAG - the 10 most relevant passages.
-2. Dynamic RAG - as many passages as clear the frozen relevance cutoff (3-15).
+1. Simple RAG - the 10 most relevant passages (the default recommendation).
+2. Dynamic RAG - every passage that clears the frozen relevance cutoff (-3.68, at least 3, no upper limit).
 3. Whole handbook - the entire handbook, prompt-cached between questions.
 """
 from __future__ import annotations
@@ -56,8 +56,8 @@ cover something. They differ in how much of the handbook the AI gets to read.
 
 2  Dynamic RAG
    The same librarian, but instead of always 10 pages they hand over every page that
-   looks relevant enough: at least 3, at most 15. Sounds smarter, but in our tests it
-   was slightly worse than Simple RAG. It's here so you can compare.
+   looks relevant enough: at least 3, and as many as clear the bar (usually about 10,
+   sometimes 30 or more). About as fast and cheap as Simple RAG.
 
 3  Whole handbook
    No librarian: the AI reads the entire handbook (about 1,000 pages) for every
@@ -66,11 +66,11 @@ cover something. They differ in how much of the handbook the AI gets to read.
    while it stays loaded (5 minutes after the last question).
 
 How they compared, on 60 test questions none of them had seen before:
-Simple RAG and Whole handbook each got 75% of answers fully right. Whole handbook gave
-more complete answers, especially to oddly worded questions, but added small unsupported
-details more often and cost about 7 times as much. Both said "not covered" correctly for
-all 10 questions the handbook doesn't answer. (Dynamic RAG, as set up here, was only
-tested on an earlier 40 questions, where it scored 68% against Simple RAG's 72%.)
+all three got about three answers in four fully right (Simple 75%, Dynamic 77%, Whole
+handbook 75%) - too close to call. Whole handbook gave more complete answers, especially
+to oddly worded questions, but added small unsupported details more often and cost about
+7 times as much. All three said "not covered" correctly for all 10 questions the
+handbook doesn't answer.
 """
 
 HELP_IN_MODE = "Type a question, 'menu' to go back, or 'quit' to exit."
@@ -171,8 +171,9 @@ class Engine:
         if mode == "simple":
             return self.retriever.search(question, k=self.settings.answer.top_k)
         if mode == "dynamic":
+            # The setting tested in the final face-off: cutoff -3.68, at least 3 passages, no upper limit.
             from .retrieval import DynamicSelection
-            frozen = ROOT / "evals" / "frozen_dynamic_selection.json"
+            frozen = ROOT / "evals" / "frozen_dynamic_nocap.json"
             return self.retriever.search_dynamic(question, DynamicSelection.load(frozen))
         raise ValueError(mode)
 

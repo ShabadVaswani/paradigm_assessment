@@ -87,3 +87,19 @@ def test_api_errors_are_reported_without_crashing():
     error = anthropic.AuthenticationError("bad key", response=httpx2.Response(401, request=request), body=None)
     out = run(["1", "leave?", "q"], FakeEngine(error=error))
     assert "API key was rejected" in out
+
+
+def test_dynamic_option_uses_the_no_cap_setting_from_the_face_off():
+    from handbook_qa.app import Engine
+    from handbook_qa.config import load_settings
+
+    class FakeRetriever:
+        def search_dynamic(self, question, selection):
+            self.selection = selection
+            return []
+
+    engine = Engine(load_settings())
+    engine._retriever = FakeRetriever()
+    engine.retrieve("dynamic", "q")
+    selection = engine._retriever.selection
+    assert (selection.cutoff, selection.min_keep, selection.max_keep, selection.candidates) == (-3.68, 3, 50, 50)
