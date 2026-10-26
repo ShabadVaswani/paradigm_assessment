@@ -85,6 +85,14 @@ def test_answer_loop_fetches_permitted_images_and_checks_citations(monkeypatch):
     assert [r["is_error"] for r in tool_results] == [False, True]  # an image not in the excerpts is refused
 
 
+def test_prompt_asks_for_a_direct_answer_and_a_fixed_not_covered_opening():
+    from handbook_qa.answer import SYSTEM_PROMPT
+    assert "Answer the question directly" in SYSTEM_PROMPT
+    assert 'start with "The handbook doesn\'t cover this."' in SYSTEM_PROMPT
+    assert "Never mention excerpts, passages" in SYSTEM_PROMPT
+    assert "excerpts I have" not in SYSTEM_PROMPT
+
+
 def test_user_message_lists_excerpts_with_ids_and_pages():
     message = build_user_message("Laptop budget?", HITS, INDEX)
     assert '<excerpt id="people/spending#01" kind="chunk"' in message and 'pages="7-8"' in message

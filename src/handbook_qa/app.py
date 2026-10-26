@@ -258,12 +258,7 @@ def _wrap(text: str, indent: str = "") -> str:
 
 def render_reply(reply: Reply) -> str:
     answer, checks = reply.result.answer, reply.result.checks
-    lines = [""]
-    if answer.coverage == "not_covered":
-        lines.append("!! NOT COVERED: the handbook doesn't cover this question.")
-    elif answer.coverage == "partial":
-        lines.append("!! PARTLY COVERED: the handbook only answers part of this question.")
-    lines += [_wrap(answer.answer), ""]
+    lines = ["", _wrap(answer.answer), ""]   # coverage stays internal: the answer itself says what isn't covered
     if answer.citations:
         lines.append("Quotes from the handbook:")
         for n, (citation, check) in enumerate(zip(answer.citations, checks), start=1):

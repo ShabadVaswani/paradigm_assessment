@@ -45,12 +45,13 @@ def test_answer_shows_quotes_with_pages_and_check_status():
     text = render_reply(make_reply())
     assert '"You do not need to get approval for time off from your manager."' in text
     assert "Time off, page 954" in text and "checked: quote found on this page" in text
-    assert "NOT COVERED" not in text
 
 
-def test_not_covered_and_partial_are_flagged_clearly():
-    assert "NOT COVERED: the handbook doesn't cover this question" in render_reply(make_reply("not_covered"))
-    assert "PARTLY COVERED" in render_reply(make_reply("partial"))
+def test_the_coverage_label_stays_internal():
+    for coverage in ("full", "partial", "not_covered"):
+        text = render_reply(make_reply(coverage))
+        assert text.lstrip().startswith("You don't need approval for time off")   # the answer comes first
+        assert "covered" not in text.lower() and "partial" not in text.lower()       # no banner or label
 
 
 def test_unverifiable_quotes_are_flagged():
