@@ -495,3 +495,10 @@ My answers to the AI's questions:
 ### What the AI got wrong, and how it was caught
 
 - **The prompt-injection probe's expected routes were too narrow.** The AI listed only off-topic or handbook as acceptable. The stand-in chose small talk with a polite refusal, which is reasonable. The scoring script flagged it as wrong; the AI looked at the reply and recorded it as harmless rather than changing the prompt.
+
+### Follow-up: no banners
+
+> "[Quick reply, no handbook search needed: 3.1s] remove this banner, don't add banners"
+
+- **What the AI got wrong:** it added a status line to quick replies, and the guard's time to the footer of normal answers. I hadn't asked for either, and I had already asked for banners to be removed (decision 25).
+- **Fix:** both are removed. A quick reply now prints only the reply, and the footer of normal answers is back to what it was before the guard.

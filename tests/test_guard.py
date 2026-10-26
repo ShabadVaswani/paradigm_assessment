@@ -86,7 +86,7 @@ def test_app_answers_small_talk_without_the_pipeline():
         reply = engine.answer(mode, "hi")
         assert reply.route == "small_talk" and reply.result.answer.citations == []
         text = render_reply(reply)
-        assert "Hi! Ask me anything" in text and "Quick reply" in text and "No quotes" not in text
+        assert text.strip() == "Hi! Ask me anything about how PostHog works."     # just the reply, no banner
 
 
 def test_with_the_guard_off_no_classifier_call_is_made():
