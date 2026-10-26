@@ -5,7 +5,7 @@ import anthropic
 import httpx2
 
 from handbook_qa.answer import Citation, HandbookAnswer
-from handbook_qa.app import EXPLANATION, App, Passage, Reply, render_reply
+from handbook_qa.app import EXPLANATION, App, Reply, check_key, get_api_key, render_reply, setup_help
 
 
 def make_reply(coverage="full", ok=True, in_excerpt=True):
@@ -27,14 +27,10 @@ class FakeEngine:
             raise self.error
         return self.reply
 
-    def passages(self, mode, question):
-        self.calls.append((mode, question))
-        return [Passage("people/time-off#01", "Time off", "954", "You do not need to get approval")]
 
-
-def run(inputs, engine, retrieval_only=False):
+def run(inputs, engine):
     feed, out = iter(inputs), []
-    App(engine, retrieval_only, input_fn=lambda prompt: next(feed), print_fn=out.append).run()
+    App(engine, input_fn=lambda prompt: next(feed), print_fn=out.append).run()
     return "\n".join(out)
 
 
@@ -69,17 +65,10 @@ def test_asking_in_a_mode_then_going_back_and_quitting():
     assert "Quotes from the handbook" in out and out.endswith("Bye.")
 
 
-def test_whole_handbook_asks_before_spending_and_is_unavailable_without_api():
+def test_whole_handbook_asks_before_spending():
     engine = FakeEngine(make_reply())
     out = run(["3", "n", "q"], engine)
     assert "costs about $1.80" in out and engine.calls == []
-    out = run(["3", "q"], engine, retrieval_only=True)
-    assert "needs the Claude API" in out
-
-
-def test_retrieval_only_shows_passages_without_answering():
-    out = run(["1", "leave?", "q"], FakeEngine(), retrieval_only=True)
-    assert "Retrieval-only mode" in out and "Time off, page 954" in out
 
 
 def test_api_errors_are_reported_without_crashing():
@@ -98,8 +87,78 @@ def test_dynamic_option_uses_the_no_cap_setting_from_the_face_off():
             self.selection = selection
             return []
 
-    engine = Engine(load_settings())
+    engine = Engine(load_settings(), api_key="unused")
     engine._retriever = FakeRetriever()
     engine.retrieve("dynamic", "q")
     selection = engine._retriever.selection
     assert (selection.cutoff, selection.min_keep, selection.max_keep, selection.candidates) == (-3.68, 3, 50, 50)
+
+
+GOOD, BAD = "sk-ant-good-0000", "sk-ant-bad-1111"
+
+
+def key_flow(env_key, typed):
+    """Runs get_api_key with a fake key check; returns (key, everything printed, the prompts shown)."""
+    feed, out, prompts, checked = iter(typed), [], [], []
+
+    def read_secret(prompt):
+        prompts.append(prompt)
+        return next(feed)
+
+    def check(key):
+        checked.append(key)
+        return None if key == GOOD else "Anthropic rejected that key."
+
+    key = get_api_key(env_key, read_secret=read_secret, print_fn=out.append, check=check)
+    return key, "\n".join(out), prompts, checked
+
+
+def test_a_working_key_from_the_environment_is_used_without_asking():
+    key, out, prompts, checked = key_flow(GOOD, [])
+    assert key == GOOD and prompts == [] and out == "" and checked == [GOOD]
+
+
+def test_without_a_key_it_explains_setup_then_asks_with_hidden_input():
+    key, out, prompts, _ = key_flow(None, [BAD, GOOD])
+    assert key == GOOD
+    assert "ANTHROPIC_API_KEY is not set" in out and setup_help() in out
+    assert "rejected" in out and "session only" in out
+    assert len(prompts) == 2 and "hidden" in prompts[0]
+    assert GOOD not in out and BAD not in out          # the key is never printed
+
+
+def test_setup_help_is_two_or_three_lines():
+    assert 2 <= len(setup_help().splitlines()) <= 3
+
+
+def test_a_rejected_environment_key_is_reported_and_a_new_one_asked_for():
+    key, out, prompts, checked = key_flow(BAD, [GOOD])
+    assert key == GOOD and checked == [BAD, GOOD]
+    assert "The key in ANTHROPIC_API_KEY didn't work" in out and BAD not in out
+
+
+def test_giving_up_on_the_key_returns_none():
+    assert key_flow(None, [""])[0] is None                  # Enter quits
+    key, out, prompts, _ = key_flow(None, [BAD, BAD, BAD])  # three rejected keys
+    assert key is None and len(prompts) == 3 and "Too many rejected keys" in out
+
+
+def test_check_key_lists_models_and_explains_a_rejection(monkeypatch):
+    request = httpx2.Request("GET", "https://api.anthropic.com/v1/models")
+    calls = []
+
+    class FakeAnthropic:
+        def __init__(self, api_key, **kwargs):
+            self.models = SimpleNamespace(list=lambda limit: self._list(api_key, limit))
+
+        def _list(self, api_key, limit):
+            calls.append(limit)
+            if api_key != GOOD:
+                raise anthropic.AuthenticationError("invalid x-api-key", body=None,
+                                                    response=httpx2.Response(401, request=request))
+            return []
+
+    monkeypatch.setattr("handbook_qa.app.anthropic.Anthropic", FakeAnthropic)
+    assert check_key(GOOD) is None
+    assert "rejected" in check_key(BAD)
+    assert calls == [1, 1]

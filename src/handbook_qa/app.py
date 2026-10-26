@@ -1,7 +1,10 @@
 """Terminal app: ask questions about the PostHog handbook.
 
     python -m handbook_qa                    # or: handbook-qa
-    python -m handbook_qa --retrieval-only   # no API key needed: shows the passages each option would use
+
+It needs an Anthropic API key: ANTHROPIC_API_KEY from the environment or .env, or, if there is none, a key typed in
+at startup (hidden, used for this session only, never printed or saved). Either way the key is checked first with a
+free call that lists models.
 
 Three ways to answer (all use the same answering prompt and citation checks; only the context differs):
 1. Simple RAG - the 10 most relevant passages (the default recommendation).
@@ -11,13 +14,14 @@ Three ways to answer (all use the same answering prompt and citation checks; onl
 from __future__ import annotations
 
 import argparse
+import getpass
 import os
 import shutil
 import sys
 import textwrap
 import time
 import warnings
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Callable
 
 os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")  # keep model loading quiet
@@ -87,16 +91,67 @@ class Reply:
     answer_seconds: float = 0.0
 
 
-@dataclass
-class Passage:
-    id: str
-    title: str
-    pages: str
-    preview: str
+def setup_help() -> str:
+    if sys.platform == "win32":
+        how = 'run  setx ANTHROPIC_API_KEY "<your key>"  and open a new terminal'
+    else:
+        how = "add  export ANTHROPIC_API_KEY=<your key>  to ~/.bashrc or ~/.zshrc and open a new terminal"
+    return ("Create a key at https://console.anthropic.com/settings/keys. To set it permanently,\n"
+            f"{how},\n"
+            "or put ANTHROPIC_API_KEY=<your key> in a .env file in the project folder (see .env.example).")
 
 
-def api_configured() -> bool:
-    return bool(os.environ.get("ANTHROPIC_API_KEY"))
+def check_key(api_key: str) -> str | None:
+    """None if Anthropic accepts the key, else why not. Listing models is free. Connection errors propagate."""
+    try:
+        anthropic.Anthropic(api_key=api_key, max_retries=1, timeout=30).models.list(limit=1)
+    except anthropic.AuthenticationError:
+        return "Anthropic rejected that key: it may be mistyped, revoked or expired."
+    except anthropic.PermissionDeniedError:
+        return "Anthropic accepted that key but it isn't allowed to use the API (permission denied)."
+    return None
+
+
+def read_hidden(prompt: str) -> str:
+    """getpass in a terminal. Piped input isn't echoed anyway, and getpass on Windows would ignore it and wait."""
+    if sys.stdin.isatty():
+        return getpass.getpass(prompt)
+    print(prompt, end="", flush=True)
+    line = sys.stdin.readline()
+    print()
+    return line
+
+
+def get_api_key(env_key: str | None, read_secret: Callable[[str], str] = read_hidden,
+                print_fn: Callable[[str], None] = print, check: Callable[[str], str | None] = check_key,
+                attempts: int = 3) -> str | None:
+    """A working key: the one from the environment, or one typed in (hidden). None if the user gives up.
+
+    A typed key is only returned to the caller, which keeps it in memory: it is never printed, saved or put
+    into the environment.
+    """
+    if env_key:
+        problem = check(env_key)
+        if problem is None:
+            return env_key
+        print_fn(f"The key in ANTHROPIC_API_KEY didn't work. {problem}")
+    else:
+        print_fn("No Anthropic API key found (ANTHROPIC_API_KEY is not set).")
+    print_fn(setup_help())
+    for _ in range(attempts):
+        try:
+            key = read_secret("\nOr paste a key to use for this session only (input is hidden; Enter to quit): ").strip()
+        except (EOFError, KeyboardInterrupt):
+            return None
+        if not key:
+            return None
+        problem = check(key)
+        if problem is None:
+            print_fn("Key accepted. It's used for this session only and isn't saved.")
+            return key
+        print_fn(problem)
+    print_fn("Too many rejected keys.")
+    return None
 
 
 def missing_data(settings: Settings) -> list[str]:
@@ -111,18 +166,12 @@ def _title(item) -> str:
     return item.record.get("article_title") or item.record.get("article_path", item.id)
 
 
-def _pages(item) -> str:
-    if item.kind == "image":
-        return str(item.record["occurrences"][0]["page"])
-    first, last = item.record["pages"]
-    return str(first) if first == last else f"{first}-{last}"
-
-
 class Engine:
     """Loads what each mode needs on first use and answers questions."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, api_key: str | None = None) -> None:
         self.settings = settings
+        self._api_key = api_key             # None: the client reads ANTHROPIC_API_KEY
         self._retriever = None
         self._shared = None
         self._whole = None
@@ -155,7 +204,7 @@ class Engine:
     def client(self) -> anthropic.Anthropic:
         if self._client is None:
             from .llm import client as make_client
-            self._client = make_client().with_options(max_retries=4, timeout=600)
+            self._client = make_client(self._api_key).with_options(max_retries=4, timeout=600)
         return self._client
 
     def _whole_handbook(self):
@@ -176,14 +225,6 @@ class Engine:
             frozen = ROOT / "evals" / "frozen_dynamic_nocap.json"
             return self.retriever.search_dynamic(question, DynamicSelection.load(frozen))
         raise ValueError(mode)
-
-    def passages(self, mode: str, question: str) -> list[Passage]:
-        hits = self.retrieve(mode, question)
-        out = []
-        for hit in hits:
-            body = hit.item.text.split("\n\n", 1)[-1] if hit.item.kind == "chunk" else hit.item.text
-            out.append(Passage(hit.item.id, _title(hit.item), _pages(hit.item), " ".join(body.split())[:180]))
-        return out
 
     def answer(self, mode: str, question: str) -> Reply:
         from .answer import answer_question
@@ -245,21 +286,12 @@ def render_reply(reply: Reply) -> str:
     return "\n".join(lines)
 
 
-def render_passages(mode: str, passages: list[Passage]) -> str:
-    lines = ["", f"Retrieval-only mode: no answer is generated. {MODE_NAMES[mode]} would give the AI these "
-                 f"{len(passages)} passages:"]
-    for n, p in enumerate(passages, start=1):
-        lines.append(f"  {n:>2}. {p.title}, page {p.pages}")
-        lines.append(_wrap(p.preview + "...", "        "))
-    return "\n".join(lines)
-
-
 # --- the loop -------------------------------------------------------------------------------------------------
 
 class App:
-    def __init__(self, engine: Engine, retrieval_only: bool, input_fn: Callable[[str], str] = input,
+    def __init__(self, engine: Engine, input_fn: Callable[[str], str] = input,
                  print_fn: Callable[[str], None] = print) -> None:
-        self.engine, self.retrieval_only = engine, retrieval_only
+        self.engine = engine
         self.input, self.print = input_fn, print_fn
         self.whole_confirmed = False
 
@@ -290,18 +322,13 @@ class App:
 
     def ask_loop(self, mode: str) -> str:
         self.print(f"\n{MODE_NAMES[mode]}. {HELP_IN_MODE}")
-        if mode == "whole":
-            if self.retrieval_only:
-                self.print("The whole-handbook option needs the Claude API (it has no retrieval step to show). "
-                           "Set up a key as described in the README, or pick option 1 or 2.")
+        if mode == "whole" and not self.whole_confirmed:
+            self.print("Note: this sends the whole handbook (~670k tokens) with each question. The first question "
+                       "costs about $1.80 while it loads into the cache; questions asked within 5 minutes of the "
+                       "previous one cost about $0.14 each.")
+            if (self._ask("Continue? [y/N] ") or "").lower() not in ("y", "yes"):
                 return "menu"
-            if not self.whole_confirmed:
-                self.print("Note: this sends the whole handbook (~670k tokens) with each question. The first question "
-                           "costs about $1.80 while it loads into the cache; questions asked within 5 minutes of the "
-                           "previous one cost about $0.14 each.")
-                if (self._ask("Continue? [y/N] ") or "").lower() not in ("y", "yes"):
-                    return "menu"
-                self.whole_confirmed = True
+            self.whole_confirmed = True
         while True:
             question = self._ask("\nYour question: ")
             if question is None or question.lower() in ("quit", "exit", "q"):
@@ -312,10 +339,7 @@ class App:
                 continue
             self.print("Working on it...")
             try:
-                if self.retrieval_only:
-                    self.print(render_passages(mode, self.engine.passages(mode, question)))
-                else:
-                    self.print(render_reply(self.engine.answer(mode, question)))
+                self.print(render_reply(self.engine.answer(mode, question)))
             except anthropic.AuthenticationError:
                 self.print("The API key was rejected. Check ANTHROPIC_API_KEY (in your environment or .env).")
             except anthropic.RateLimitError:
@@ -330,9 +354,7 @@ class App:
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="python -m handbook_qa", description="Ask questions about the PostHog handbook.")
-    parser.add_argument("--retrieval-only", action="store_true",
-                        help="don't call the Claude API; show which passages each option would use")
-    args = parser.parse_args(argv)
+    parser.parse_args(argv)
     try:
         sys.stdout.reconfigure(encoding="utf-8")
     except AttributeError:
@@ -343,12 +365,15 @@ def main(argv: list[str] | None = None) -> None:
     if missing:
         sys.exit("Some data files are missing: " + ", ".join(missing) + "\nBuild them once with:\n"
                  "  python -m handbook_qa.ingest setup\n(see the README; this makes no API calls)")
-    retrieval_only = args.retrieval_only
-    if not retrieval_only and not api_configured():
-        print("ANTHROPIC_API_KEY is not set (see .env.example), so the app starts in retrieval-only mode:\n"
-              "it shows which passages each option would use, without generating answers.")
-        retrieval_only = True
-    App(Engine(settings), retrieval_only).run()
+    try:
+        api_key = get_api_key(os.environ.get("ANTHROPIC_API_KEY"))
+    except (anthropic.APIConnectionError, anthropic.APITimeoutError):
+        sys.exit("Couldn't reach the Claude API to check the key. Check your internet connection and try again.")
+    except anthropic.APIStatusError as error:
+        sys.exit(f"The Claude API returned an error ({error.status_code}) while checking the key. Try again later.")
+    if api_key is None:
+        sys.exit("No working API key, so the app can't answer questions. Bye.")
+    App(Engine(settings, api_key)).run()
 
 
 if __name__ == "__main__":
