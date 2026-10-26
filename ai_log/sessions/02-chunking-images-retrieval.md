@@ -84,3 +84,41 @@ Turn the handbook PDF into retrieval data: chunks of a sensible size that follow
 - One of its own unit tests for RRF asserted that two items with identical fused scores differed. The test failed; the maths was right and the test was wrong, so it fixed the test.
 - When writing the spot-check it assumed the "spending company money" article wasn't in the PDF, because a `grep | head -20` it used to list chunk ids had cut the output short. The spot-check itself showed `people/spending-money` at rank 1.
 - Two commits contain more than their messages say, because files were already staged when they were made. `5e2fe61` ("Embed chunks and images locally…") also includes the rename of this log file. `aa1f30d` ("Add nomic-embed-text-v1.5 vectors…") also includes decisions 10–11 and this log's update. The AI noticed when the next commit had nothing to commit. It left the history as it is rather than rewrite it, and noted it here.
+
+## Continued (2026-10-25): stage notebooks and reranking
+
+### Key prompt
+
+> from now on keep a notebook for each stage that shows what you did. Also redo the earlier stages in notebooks, reuse saved results wherever you can, but include all the code so each notebook can run again and shows the output
+>
+> then add a cross-encoder reranker after the merged results, keep the best few after reranking, make it switchable on/off
+
+### What the AI did / proposed
+
+- **Six new notebooks** (decision 12), each executed and committed with outputs: `02_pdf_extraction`, `03_images`, `04_chunking`, `05_embeddings`, `06_retrieval`, `07_reranking`.
+  - They call the package code rather than copy it.
+  - `REBUILD` / `RUN_API` switches control whether expensive steps are redone.
+  - By default they reuse the saved articles, rendered images, image descriptions and vectors.
+- **Reranker** (decision 13):
+  - `Reranker` + `Retriever.search(rerank=...)` rescore the top 30 fused results with a local cross-encoder and keep 5.
+  - Switchable via `RERANK=on|off`, `--no-rerank`, or per call.
+  - Tests use a fake reranker.
+- **Comparison:** compared three local cross-encoders in notebook 07 for speed, memory and the spot-check questions, and changed the default from jina turbo to MiniLM-L-6 based on that.
+- **Smaller items:**
+  - Notebook 02 counted the "dollar amounts rendered as maths" problem: 2 places (pages 21 and 593).
+  - Notebook 06 noted the BM25 plural strip turns "bonuses" into "bonuse". Harmless when both sides are plural, but it won't match "bonus".
+- **Tests:** 30 now, all passing.
+
+### Accepted / rejected
+
+- I asked for the notebooks and a switchable reranker that keeps the best few. The AI chose the three candidate models, 30 candidates / keep 5, and the MiniLM default. I haven't commented on those yet.
+
+### What the AI got wrong, and how it was caught
+
+- **Chunker bug, found by the new notebook.** The invariant checks in notebook 04 found 4 chunks ending on a heading. An H2 directly followed by an H3 had been cut between the two, against the chunker's own rule. The bug was in the chunking code from earlier in this session.
+  - The AI fixed it. Its first regression test passed on the old code too, so it didn't reproduce the bug. The AI caught that by deliberately running the test against the old code, then made the test trigger the bug.
+  - The 8 affected chunks were re-embedded and the other 928 reused.
+- **Stale numbers in decision 06.** The same notebook showed two figures came from a run before the image descriptions existed: overlap in 17 chunks (actually 23), and 21 whole short articles under 400 tokens (actually 20). Corrected.
+- **Reranker default picked before measuring.** The AI set jina turbo as the default on paper (it reads whole chunks); in the comparison it ranked lowest.
+- **Spot-check too narrow for image answers.** The first comparison counted only the image record as the answer for image-only facts. That made both 8K rerankers look as if they had lost the logo answer, when they had returned the chunk containing that image's description. The AI noticed while checking which question each model missed. It widened the expectations (image record or its chunk), reran, and noted this in the notebook.
+- **A command that hung.** One build command contained a stray bare `python` call, which waited for input and blocked the step. The AI stopped it after the 10-minute timeout, checked no orphaned processes were left, and redid the edit with the edit tool.
