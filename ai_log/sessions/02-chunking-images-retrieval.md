@@ -263,3 +263,43 @@ My answers to the AI's questions:
 - **Token estimates.** Its earlier cl100k figure for the whole handbook (443k) understated the real Claude count (673k) by 52%. The cost estimate it gave me used the real count from the API's token counter.
 - **A stand-in run that got thrown away.** The AI launched the four stand-in agents for the dynamic system before you added the key, then stopped them minutes later once the key worked. Their partial output was not used.
 - **The experiment agent noted** that its tie-break puts the cutoff at the edge of a plateau, so small changes would lower recall. The cutoff stayed frozen regardless.
+
+## Continued (2026-10-25): API policy, uncapped dynamic selection, terminal app, README
+
+### Key prompts
+
+> From now on, avoid API calls until final face-off. Use subagent stand-ins that is my subscription. For all development and testing runs, for final phase of use API key, just acknowledge
+
+> Use subagent no API key. Check dynamic selection with no upper limit at cutoffs. The older cutoff -3.68 then do one at -3.8 and another at the current cutoff -3.898. Report recall mean max chunks and tokens. Versus fixed top 10 or 15 . Don't change the defaults or frozen results
+
+> Meanwhile, create an app. It should have simple terminal UI, and initially you should get three options. One is simple rag, second is dynamic rag, third is whole handbook. Also at fourth, it will be explain these options. And when user clicks that, it will explain what these options mean. In very simple terms. also answers should show quotes with page numbers and clearly say when the handbook doesn't cover the question. Then also create a README on how to use this. And how to go through these notebooks and GitHub repo basically.
+
+### What the AI did / proposed
+
+- **API policy.** Saved my no-API-in-development rule to its memory, so later sessions follow it (decision 19).
+- **Uncapped dynamic selection.** A Sonnet subagent wrote and ran `notebooks/09c_dynamic_no_cap.ipynb`, using local models only. It asserts that the frozen file and the earlier numbers are reproduced. Results are in decision 20: a little more recall at much larger and less predictable context, so nothing changes.
+  - The AI checked the notebook ran without errors and that nothing else in `src/` or `evals/` changed.
+  - The agent flagged edits it hadn't made; those were the AI's own app work, committed in the meantime.
+- **The app** (`src/handbook_qa/app.py`; `python -m handbook_qa` or `handbook-qa`):
+  - A menu with Simple RAG, Dynamic RAG, Whole handbook, and "Explain these options" in plain language.
+  - Every answer shows its quotes with article and page, plus whether each quote was verified. Clear banners say NOT COVERED or PARTLY COVERED.
+  - The whole-handbook option shows its cost and asks for confirmation first.
+  - Friendly messages for API errors.
+  - A `--retrieval-only` mode that needs no key, and switches on automatically when no key is configured.
+  - The AI also added `ingest setup`, so a fresh clone can build its data without API calls.
+- **Testing without the API.** 8 app tests use a fake engine. The AI also ran the real app end to end in retrieval-only mode, piping in the menu choices: explanation, Simple RAG, Dynamic RAG, and the whole-handbook guard.
+- **README.md**, written for reviewers: quick start, the API key and `.env`, using the app, how it works, results tables, a guide to the notebooks, the repo layout, assumptions and limitations, and how AI was used.
+
+### Accepted / rejected
+
+- I specified the app's options, explanations and answer display, the uncapped analysis, and that defaults stay unchanged.
+- The AI's additions, which I haven't commented on yet:
+  - retrieval-only mode;
+  - the cost confirmation for the whole-handbook option;
+  - `ingest setup`;
+  - the README structure.
+
+### What the AI got wrong, and how it was caught
+
+- **The cost of later whole-handbook questions.** The app's text first said follow-up questions cost about 18 cents. That's the average including the first, expensive question. The AI caught it by measuring per-question costs from the saved usage: $1.83 for the first, $0.14 on average for the other 39. It corrected the text and the test.
+- **A crash at the menu.** The first version would have crashed if input ended (Ctrl+D / Ctrl+C) at the menu prompt. The AI fixed it before the tests ran.
