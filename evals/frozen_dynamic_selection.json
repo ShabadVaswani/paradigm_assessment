@@ -1,0 +1,37 @@
+{
+  "model": "Xenova/ms-marco-MiniLM-L-6-v2",
+  "score": "raw MiniLM cross-encoder logit on (question, item text), as Reranker.score returns it",
+  "candidates_reranked": 50,
+  "first_stage": {
+    "dense_candidates": 50,
+    "bm25_candidates": 50,
+    "rrf_k": 60
+  },
+  "cutoff": -3.898,
+  "selection": "keep every reranked candidate with score >= cutoff, best first",
+  "min_kept": 3,
+  "max_kept": 15,
+  "rule": "Choose the cutoff with the highest mean chunk recall subject to mean chunks kept <= 10 (clamp 3-15 applied per question), over a grid of midpoints between consecutive distinct observed MiniLM scores of the tuning questions (plus one 1.0 below the lowest and one 1.0 above the highest). Break ties by fewer mean chunks, then by the higher cutoff; recalls within 1e-9 count as tied.",
+  "in_sample": {
+    "questions": 40,
+    "chunk_recall": 0.825,
+    "mean_chunks": 9.725
+  },
+  "cross_validated": {
+    "protocol": "repeated 5-fold, 20 repeats (seeds 0-19), rule applied on training folds only",
+    "chunk_recall": 0.8094,
+    "chunk_recall_sd_over_repeats": 0.0128,
+    "mean_chunks": 9.525,
+    "mean_chunks_sd_over_repeats": 0.145,
+    "diff_vs_fixed_k_at_same_mean_chunks": -0.0266,
+    "diff_vs_fixed_k_95ci_bootstrap_over_questions": "-0.066 to +0.007"
+  },
+  "reference_fixed_top10": {
+    "of_50_reranked": 0.8458,
+    "of_30_reranked_app_default": 0.8458
+  },
+  "eval_set": "evals/handbook_eval.jsonl",
+  "notebook": "notebooks/09b_dynamic_selection_50.ipynb",
+  "date": "2026-10-25",
+  "note": "frozen before the final end-to-end comparison; must not be changed after seeing those results"
+}
