@@ -29,6 +29,15 @@ def api_key(settings: LLMSettings) -> str | None:
     return None
 
 
+def client(settings: LLMSettings) -> anthropic.Anthropic:
+    key = api_key(settings)
+    if settings.provider == "foundry":
+        return anthropic.AnthropicFoundry(api_key=key, resource=settings.foundry_resource or None)
+    if settings.provider == "anthropic":
+        return anthropic.Anthropic(api_key=key) if key else anthropic.Anthropic()
+    raise ValueError(f"Unknown LLM_PROVIDER {settings.provider!r}; use 'anthropic' or 'foundry'")
+
+
 def async_client(settings: LLMSettings) -> anthropic.AsyncAnthropic:
     key = api_key(settings)
     if settings.provider == "foundry":

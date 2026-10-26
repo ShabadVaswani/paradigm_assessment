@@ -68,3 +68,25 @@ def run_get_image(store: ImageStore, tool_input: dict) -> tuple[list[dict], bool
         {"type": "text", "text": json.dumps(meta, ensure_ascii=False)},
         {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": data}},
     ], False
+
+
+def main(argv: list[str] | None = None) -> None:
+    """Command-line `get_image`, for answering outside the API: prints what the tool returns, with the image's
+    file path in place of its bytes.  Usage: python -m handbook_qa.tools get_image IMAGE_ID"""
+    import sys
+
+    from .config import ROOT, load_settings
+
+    args = sys.argv[1:] if argv is None else argv
+    if len(args) != 2 or args[0] != "get_image":
+        sys.exit("usage: python -m handbook_qa.tools get_image IMAGE_ID")
+    sys.stdout.reconfigure(encoding="utf-8")
+    store = ImageStore(load_settings().paths.image_index, ROOT)
+    content, is_error = run_get_image(store, {"image_id": args[1]})
+    print(content[0]["text"])
+    if not is_error:
+        print("image file:", (ROOT / store.get(args[1]).file).resolve())
+
+
+if __name__ == "__main__":
+    main()

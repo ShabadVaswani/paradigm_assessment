@@ -74,12 +74,28 @@ class LLMSettings:
 
 
 @dataclass(frozen=True)
+class AnswerSettings:
+    model: str = _env("ANSWER_MODEL", "claude-sonnet-5-5")
+    effort: str = _env("ANSWER_EFFORT", "medium")
+    top_k: int = int(_env("ANSWER_TOP_K", "10"))          # reranked excerpts passed to the model
+    max_tool_rounds: int = int(_env("ANSWER_MAX_TOOL_ROUNDS", "4"))
+
+
+@dataclass(frozen=True)
+class JudgeSettings:
+    model: str = _env("JUDGE_MODEL", "claude-opus-5-5")
+    effort: str = _env("JUDGE_EFFORT", "high")
+
+
+@dataclass(frozen=True)
 class Settings:
     paths: Paths = field(default_factory=Paths)
     chunks: ChunkSettings = field(default_factory=ChunkSettings)
     llm: LLMSettings = field(default_factory=LLMSettings)
     embed: EmbedSettings = field(default_factory=EmbedSettings)
     retrieval: RetrievalSettings = field(default_factory=RetrievalSettings)
+    answer: AnswerSettings = field(default_factory=AnswerSettings)
+    judge: JudgeSettings = field(default_factory=JudgeSettings)
 
 
 def load_settings() -> Settings:
