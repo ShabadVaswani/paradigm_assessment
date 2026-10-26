@@ -1,4 +1,5 @@
-"""Paths and settings. Everything can be overridden with environment variables."""
+"""Paths and settings. Everything can be overridden with environment variables, or with a `.env` file in the repo
+root (gitignored; see `.env.example`). Variables already set in the environment win over the file."""
 from __future__ import annotations
 
 import os
@@ -6,6 +7,29 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def load_dotenv(path: Path = ROOT / ".env") -> None:
+    """Put KEY=VALUE lines from `path` into os.environ (skipping keys already set), so both these settings and
+    the Anthropic SDK see them. Blank lines, # comments and empty values are ignored (an empty ANTHROPIC_API_KEY
+    would otherwise count as set); values may be quoted, and unquoted values may end with a " # comment"."""
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.removeprefix("export ").split("=", 1)
+        key, value = key.strip(), value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+            value = value[1:-1]
+        else:
+            value = value.split(" #", 1)[0].strip()
+        if value:
+            os.environ.setdefault(key, value)
+
+
+load_dotenv()
 
 HANDBOOK_URL = "https://paradigmiq.box.com/shared/static/grn1axnqf50npquo07x8r6yojb29g47l.pdf"
 HANDBOOK_SHA256 = "0f81a75f987ef19e5fd18d85e1a07aa6bd7691a72a5723008f208c7cab7e2a57"
