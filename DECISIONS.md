@@ -281,3 +281,43 @@ One entry per design choice: the options considered, the evidence, what I chose,
   - Top 15 adds nothing over top 10.
 - **Chosen:** nothing changed. Simple RAG (top 10) stays the default, and the frozen cutoff and its file are untouched.
 - **AI suggested:** the same, as did the subagent. The gain is small and in-sample, and the context size is unpredictable.
+
+## 21. 60 held-out questions, including 10 the handbook doesn't cover (2026-10-26)
+
+- **Options:** keep evaluating on the 40 dev questions, which were also used to choose settings; or write new questions that nothing was tuned on.
+- **Chosen (my spec):** 60 more questions, with the answer key built by reading the handbook, not by search. 10 of them must be questions the handbook doesn't cover.
+- **AI suggested:**
+  - Label the original 40 `dev` and the new 60 `holdout`, and report the face-off on the holdout.
+  - Commit the questions before any system answers them.
+  - Have four Opus subagents write 15 each, mixing single, reworded, multi-section, multi-article and not-covered questions, with the dev questions shown so they wouldn't be repeated.
+  - Each not-covered question carries the search terms used to confirm it's absent and a near-miss note. The validator prints how many articles contain each search term.
+  - The main session re-checked all 10 absences with its own synonym searches, and relabelled B-17 from multi-section to single because its sections fall in one chunk.
+  - Scoring:
+    - Not-covered questions have no expected chunks, so retrieval recall leaves them out.
+    - The judge scores them as usual, with "the handbook doesn't cover this" as the reference answer.
+
+## 22. Final face-off: top 10, top 15, no-cap dynamic and whole handbook on the held-out 60 (2026-10-26)
+
+- **Setup (my spec):** a face-off through the API between RAG top 10, the whole handbook, and dynamic selection at -3.68 with no cap. I added RAG top 15 during the run.
+  - The new API key is in my user environment, and the old one was cleared from `.env`.
+  - The AI checked that detached processes pick up the new key (comparing only the last 4 characters).
+- **What was frozen first** (checked from git history in notebook 12):
+  - `evals/frozen_dynamic_nocap.json` (-3.68, floor 3, limited only by the 50-candidate pool), before any no-cap answers. The main pipeline reproduced notebook 09c's numbers on the dev 40 with it.
+  - The 60 held-out questions, before any held-out answers.
+  - The top-15 runner change, before any top-15 answers.
+- **Reuse:** top 10 and the whole handbook reused their earlier dev-40 answers, made with the same code, model and prompt. Top 15 and no-cap answered all 100 questions.
+- **Result on the 60 held-out questions** (`notebooks/12_final_faceoff.ipynb`):
+
+  | | top 10 | top 15 | no-cap | whole handbook |
+  |---|---|---|---|---|
+  | fully right | 75% | 77% | 77% | 75% |
+  | completeness | 0.87 | 0.88 | 0.87 | 0.98 |
+  | groundedness | 0.97 | 0.96 | 0.98 | 0.91 |
+  | not-covered questions declined (of 10) | 10 | 10 | 10 | 10 |
+  | cost / question | $0.023 | $0.032 | $0.024 | $0.166 |
+
+  - **Fully right is a tie:** every 95% bootstrap interval includes zero.
+  - **The whole handbook is more complete:** the interval for its completeness gain over top 10 is 0.04 to 0.18. Most of the gain is on reworded questions. It is less grounded, about 7 times the cost, and twice as slow.
+- **Chosen:** none yet; it's my call. The app keeps its defaults: Simple RAG = top 10, and the frozen 3-15 dynamic option.
+- **AI suggested:** keep top 10 as the default, offer the whole handbook when completeness matters more than cost, and work next on retrieval for reworded questions.
+- **API spend for the face-off:** about $33 ($17 answering, $16 judging).
