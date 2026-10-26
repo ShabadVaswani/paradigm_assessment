@@ -4,8 +4,8 @@ The model sees only the retrieved excerpts (with `[page N]` markers) and may cal
 excerpts mention. It must say when the excerpts don't cover the question, and every claim must come with an exact
 quote, the excerpt it is from and its page. `citations.check_citations` verifies those afterwards.
 
-Answers can also come from outside the API (e.g. Claude Code subagents given the same prompt, while no API key is
-connected): `write_tasks` / `load_answer` handle that path.
+For development runs without the API, `write_task` saves the exact prompt so a Claude Code subagent can answer it
+as a stand-in.
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ import anthropic
 from pydantic import BaseModel, Field
 
 from .citations import CitationCheck, PageIndex, check_citations, excerpt_with_pages
-from .config import AnswerSettings, LLMSettings
+from .config import AnswerSettings
 from .retrieval import Hit, Item
 from .tools import GET_IMAGE_TOOL, ImageStore, run_get_image
 
@@ -95,14 +95,14 @@ def build_user_message(question: str, hits: list[Hit], index: PageIndex) -> str:
     return f"{excerpts}\nQuestion: {question}"
 
 
-def answer_question(client: anthropic.Anthropic, llm: LLMSettings, settings: AnswerSettings, question: str,
+def answer_question(client: anthropic.Anthropic, settings: AnswerSettings, question: str,
                     hits: list[Hit], index: PageIndex, images: ImageStore) -> AnswerResult:
     """Answer from retrieved excerpts (RAG)."""
-    return run_answer(client, llm, settings, question, build_user_message(question, hits, index),
+    return run_answer(client, settings, question, build_user_message(question, hits, index),
                       {hit.item.id: hit.item for hit in hits}, set(allowed_images(hits)), index, images)
 
 
-def run_answer(client: anthropic.Anthropic, llm: LLMSettings, settings: AnswerSettings, question: str,
+def run_answer(client: anthropic.Anthropic, settings: AnswerSettings, question: str,
                user_content: str | list[dict], excerpts: dict[str, Item], permitted: set[str], index: PageIndex,
                images: ImageStore) -> AnswerResult:
     """Run the model (with get_image available) until it returns a structured answer, then check its citations
@@ -116,9 +116,9 @@ def run_answer(client: anthropic.Anthropic, llm: LLMSettings, settings: AnswerSe
             system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
             tools=[GET_IMAGE_TOOL], output_format=HandbookAnswer,
             output_config={"effort": settings.effort}, messages=messages,
+            # Server-side fallback: if the model declines, the API reruns the request on a model that can answer.
+            betas=[FALLBACK_BETA], fallbacks="default",
         )
-        if llm.provider == "anthropic":
-            request.update(betas=[FALLBACK_BETA], fallbacks="default")
         response = client.beta.messages.parse(**request)
         add_usage(usage, getattr(response, "usage", None))
 
@@ -147,7 +147,7 @@ def run_answer(client: anthropic.Anthropic, llm: LLMSettings, settings: AnswerSe
             raise RuntimeError(f"No structured answer (stop_reason={response.stop_reason})")
         return AnswerResult(question, response.parsed_output, list(excerpts), viewed,
                             check_citations(response.parsed_output.citations, excerpts, index),
-                            source=f"anthropic-api:{llm.provider}:{settings.model}", usage=usage)
+                            source=f"anthropic-api:{settings.model}", usage=usage)
     raise RuntimeError(f"Still calling tools after {settings.max_tool_rounds} rounds")
 
 
@@ -161,12 +161,3 @@ def write_task(path: Path, question_id: str, question: str, hits: list[Hit], ind
         "user_message": build_user_message(question, hits, index), "allowed_images": allowed_images(hits),
         "excerpt_ids": [hit.item.id for hit in hits], "output_schema": HandbookAnswer.model_json_schema(),
     }, ensure_ascii=False, indent=1), encoding="utf-8")
-
-
-def load_answer(path: Path, hits: list[Hit], index: PageIndex, source: str) -> AnswerResult:
-    """Validate an answer written outside the API (same schema, plus `images_viewed`) and check its citations."""
-    raw = json.loads(path.read_text(encoding="utf-8"))
-    answer = HandbookAnswer.model_validate({k: raw[k] for k in ("coverage", "answer", "citations")})
-    excerpts = {hit.item.id: hit.item for hit in hits}
-    return AnswerResult(raw.get("question", ""), answer, list(excerpts), raw.get("images_viewed", []),
-                        check_citations(answer.citations, excerpts, index), source=source)

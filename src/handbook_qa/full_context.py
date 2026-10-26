@@ -11,7 +11,7 @@ import anthropic
 from .answer import AnswerResult, render_excerpts, run_answer
 from .chunking import _body, article_blocks, chunk_slug
 from .citations import PageIndex
-from .config import AnswerSettings, LLMSettings
+from .config import AnswerSettings
 from .images import ImageRecord
 from .pdf_extract import Article
 from .retrieval import Item
@@ -45,10 +45,10 @@ def user_content(document: str, question: str) -> list[dict]:
             {"type": "text", "text": f"Question: {question}"}]
 
 
-def answer_full_context(client: anthropic.Anthropic, llm: LLMSettings, settings: AnswerSettings, question: str,
+def answer_full_context(client: anthropic.Anthropic, settings: AnswerSettings, question: str,
                         items: list[Item], document: str, index: PageIndex, images: ImageStore) -> AnswerResult:
     permitted = {image_id for item in items for image_id in item.record["image_ids"]}
-    return run_answer(client, llm, settings, question, user_content(document, question),
+    return run_answer(client, settings, question, user_content(document, question),
                       {item.id: item for item in items}, permitted, index, images)
 
 

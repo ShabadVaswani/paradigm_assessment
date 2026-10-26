@@ -4,7 +4,7 @@
     python -m handbook_qa.ingest all            # download, extract, describe images (Claude API), chunk, embed
     python -m handbook_qa.ingest download
     python -m handbook_qa.ingest extract        # PDF -> articles.json, rendered images, images.jsonl
-    python -m handbook_qa.ingest describe       # describe new/changed images with Claude (key from Key Vault)
+    python -m handbook_qa.ingest describe       # describe new/changed images with Claude (needs ANTHROPIC_API_KEY)
     python -m handbook_qa.ingest chunk          # articles + image descriptions -> chunks.jsonl, images.jsonl
     python -m handbook_qa.ingest embed          # embed new/changed chunks and images locally (nomic, CPU)
 

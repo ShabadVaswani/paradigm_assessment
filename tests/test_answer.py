@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 from handbook_qa.answer import Citation, HandbookAnswer, answer_question, build_user_message
 from handbook_qa.citations import PageIndex, check_citations, excerpt_with_pages
-from handbook_qa.config import AnswerSettings, LLMSettings
+from handbook_qa.config import AnswerSettings
 from handbook_qa.pdf_extract import Article, Element
 from handbook_qa.retrieval import Hit, Item
 
@@ -74,7 +74,7 @@ def test_answer_loop_fetches_permitted_images_and_checks_citations(monkeypatch):
     messages = FakeMessages([tool_turn, done])
     client = SimpleNamespace(beta=SimpleNamespace(messages=messages))
 
-    result = answer_question(client, LLMSettings(provider="anthropic"), AnswerSettings(), "Laptop budget?",
+    result = answer_question(client, AnswerSettings(), "Laptop budget?",
                              HITS, INDEX, FakeImages())
     assert result.images_viewed == ["img-p0008-x9"]
     assert [c.ok for c in result.checks] == [True]
@@ -113,7 +113,7 @@ def test_judge_message_and_request(monkeypatch):
                         rationale="Fine.")
     messages = FakeMessages([SimpleNamespace(stop_reason="end_turn", parsed_output=verdict)])
     client = SimpleNamespace(beta=SimpleNamespace(messages=messages))
-    assert judge_one(client, LLMSettings(), JudgeSettings(), q, result, "<excerpt ...>") == verdict
+    assert judge_one(client, JudgeSettings(), q, result, "<excerpt ...>") == verdict
     assert messages.calls[0]["model"] == "claude-opus-5-5" and messages.calls[0]["output_format"] is Judgement
 
 
@@ -139,7 +139,7 @@ def test_full_context_caches_the_handbook_and_checks_citations_against_articles(
                                                quote="You can spend up to $1,000 on a laptop without asking.")])
     messages = FakeMessages([SimpleNamespace(stop_reason="end_turn", parsed_output=final, content=[])])
     client = SimpleNamespace(beta=SimpleNamespace(messages=messages))
-    result = answer_full_context(client, LLMSettings(), AnswerSettings(), "Laptop budget?", items, document,
+    result = answer_full_context(client, AnswerSettings(), "Laptop budget?", items, document,
                                  INDEX, FakeImages())
     assert [c.ok for c in result.checks] == [True]
     assert messages.calls[0]["messages"][0]["content"][0]["text"] == document

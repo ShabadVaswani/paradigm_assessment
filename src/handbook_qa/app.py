@@ -95,12 +95,8 @@ class Passage:
     preview: str
 
 
-def api_configured(settings: Settings) -> bool:
-    if settings.llm.key_vault_url:
-        return True
-    if settings.llm.provider == "foundry":
-        return bool(os.environ.get("ANTHROPIC_FOUNDRY_API_KEY"))
-    return bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))
+def api_configured() -> bool:
+    return bool(os.environ.get("ANTHROPIC_API_KEY"))
 
 
 def missing_data(settings: Settings) -> list[str]:
@@ -159,7 +155,7 @@ class Engine:
     def client(self) -> anthropic.Anthropic:
         if self._client is None:
             from .llm import client as make_client
-            self._client = make_client(self.settings.llm).with_options(max_retries=4, timeout=600)
+            self._client = make_client().with_options(max_retries=4, timeout=600)
         return self._client
 
     def _whole_handbook(self):
@@ -196,15 +192,14 @@ class Engine:
         if mode == "whole":
             items, document = self._whole_handbook()
             retrieval_seconds = 0.0
-            result = answer_full_context(self.client, self.settings.llm, self.settings.answer, question, items,
-                                         document, index, images)
+            result = answer_full_context(self.client, self.settings.answer, question, items, document, index, images)
             titles = {item.id: _title(item) for item in items}
             passages = len(items)
         else:
             hits = self.retrieve(mode, question)
             retrieval_seconds = time.perf_counter() - started
             started = time.perf_counter()
-            result = answer_question(self.client, self.settings.llm, self.settings.answer, question, hits, index, images)
+            result = answer_question(self.client, self.settings.answer, question, hits, index, images)
             titles = {hit.item.id: _title(hit.item) for hit in hits}
             passages = len(hits)
         return Reply(mode, question, result, titles, passages, retrieval_seconds, time.perf_counter() - started)
@@ -321,7 +316,7 @@ class App:
                 else:
                     self.print(render_reply(self.engine.answer(mode, question)))
             except anthropic.AuthenticationError:
-                self.print("The API key was rejected. Check ANTHROPIC_API_KEY or your Key Vault settings in .env.")
+                self.print("The API key was rejected. Check ANTHROPIC_API_KEY (in your environment or .env).")
             except anthropic.RateLimitError:
                 self.print("The API is rate-limiting us right now. Wait a minute and try again.")
             except (anthropic.APIConnectionError, anthropic.APITimeoutError):
@@ -348,8 +343,8 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit("Some data files are missing: " + ", ".join(missing) + "\nBuild them once with:\n"
                  "  python -m handbook_qa.ingest setup\n(see the README; this makes no API calls)")
     retrieval_only = args.retrieval_only
-    if not retrieval_only and not api_configured(settings):
-        print("No Claude API key is configured (see .env.example), so the app starts in retrieval-only mode:\n"
+    if not retrieval_only and not api_configured():
+        print("ANTHROPIC_API_KEY is not set (see .env.example), so the app starts in retrieval-only mode:\n"
               "it shows which passages each option would use, without generating answers.")
         retrieval_only = True
     App(Engine(settings), retrieval_only).run()

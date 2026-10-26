@@ -5,8 +5,6 @@ description = "Ask questions about the PostHog handbook and get answers grounded
 requires-python = ">=3.11"
 dependencies = [
     "anthropic==2.3.0",
-    "azure-identity==1.26.0",
-    "azure-keyvault-secrets==4.11.3",
     "fastembed==0.9.1",
     "numpy==2.4.6",
     "pydantic==2.14.1",

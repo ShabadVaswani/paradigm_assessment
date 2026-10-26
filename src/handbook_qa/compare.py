@@ -76,7 +76,7 @@ class Context:
         self.articles_by_id = {item.id: item for item in self.article_items}
         self._document: str | None = None
         self.retriever = Retriever.from_settings(settings) if need_retriever else None
-        self.client = make_client(settings.llm).with_options(max_retries=6, timeout=900)
+        self.client = make_client().with_options(max_retries=6, timeout=900)
 
     @property
     def document(self) -> str:
@@ -109,11 +109,11 @@ def answer_system(ctx: Context, system: str, workers: int) -> None:
         started = time.perf_counter()
         try:
             if system == "full_context":
-                r = answer_full_context(ctx.client, ctx.settings.llm, ctx.settings.answer, q.question,
+                r = answer_full_context(ctx.client, ctx.settings.answer, q.question,
                                         ctx.article_items, ctx.document, ctx.index, ctx.images)
                 excerpt_ids = ["(whole handbook)"]
             else:
-                r = answer_question(ctx.client, ctx.settings.llm, ctx.settings.answer, q.question, hits[q.id],
+                r = answer_question(ctx.client, ctx.settings.answer, q.question, hits[q.id],
                                     ctx.index, ctx.images)
                 excerpt_ids = [h.item.id for h in hits[q.id]]
         except (RuntimeError, anthropic.APIError) as error:
@@ -163,7 +163,7 @@ def judge_system(ctx: Context, system: str, workers: int) -> None:
         started, usage = time.perf_counter(), {}
         try:
             result, message = rebuild_result(ctx, system, q, answers[q.id])
-            verdict = judge_one(ctx.client, ctx.settings.llm, ctx.settings.judge, q, result, message, usage)
+            verdict = judge_one(ctx.client, ctx.settings.judge, q, result, message, usage)
         except (RuntimeError, anthropic.APIError) as error:
             log.error("judge %s %s failed: %s", system, q.id, error)
             return

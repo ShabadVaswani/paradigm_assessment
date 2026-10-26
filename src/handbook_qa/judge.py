@@ -17,7 +17,7 @@ import anthropic
 from pydantic import BaseModel, Field
 
 from .answer import FALLBACK_BETA, AnswerResult, add_usage
-from .config import JudgeSettings, LLMSettings
+from .config import JudgeSettings
 from .evaluation import EvalQuestion
 
 SYSTEM_PROMPT = """You grade answers produced by a question-answering assistant for the PostHog company handbook. The assistant must answer only from the handbook excerpts it was given, cite exact quotes, and say plainly when the excerpts don't cover something.
@@ -86,18 +86,16 @@ def build_user_message(question: EvalQuestion, result: AnswerResult, excerpts_me
 Grade the assistant's answer."""
 
 
-def judge_one(client: anthropic.Anthropic, llm: LLMSettings, settings: JudgeSettings, question: EvalQuestion,
+def judge_one(client: anthropic.Anthropic, settings: JudgeSettings, question: EvalQuestion,
               result: AnswerResult, excerpts_message: str, usage: dict | None = None) -> Judgement:
     """Grade one answer. Token usage is added to `usage` when given."""
-    request = dict(
+    response = client.beta.messages.parse(
         model=settings.model, max_tokens=16000,
         system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
         output_format=Judgement, output_config={"effort": settings.effort},
         messages=[{"role": "user", "content": build_user_message(question, result, excerpts_message)}],
+        betas=[FALLBACK_BETA], fallbacks="default",
     )
-    if llm.provider == "anthropic":
-        request.update(betas=[FALLBACK_BETA], fallbacks="default")
-    response = client.beta.messages.parse(**request)
     if usage is not None:
         add_usage(usage, getattr(response, "usage", None))
     if response.stop_reason in ("refusal", "max_tokens") or response.parsed_output is None:

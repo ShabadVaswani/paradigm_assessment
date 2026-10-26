@@ -59,7 +59,6 @@ class EmbedSettings:
     model_cache: Path = ROOT / "data" / "models"
     batch_size: int = int(_env("EMBED_BATCH_SIZE", "8"))
     threads: int = int(_env("EMBED_THREADS", "4"))
-    pause_seconds: float = float(_env("EMBED_PAUSE_SECONDS", "0"))
 
 
 @dataclass(frozen=True)
@@ -86,12 +85,7 @@ class ChunkSettings:
 
 @dataclass(frozen=True)
 class LLMSettings:
-    # "anthropic" = Claude API, "foundry" = Claude on Microsoft Foundry.
-    provider: str = _env("LLM_PROVIDER", "anthropic")
-    # When set, the API key is read from this Key Vault instead of the environment.
-    key_vault_url: str = _env("AZURE_KEY_VAULT_URL", "")
-    key_secret_name: str = _env("ANTHROPIC_KEY_SECRET_NAME", "anthropic-api-key")
-    foundry_resource: str = _env("FOUNDRY_RESOURCE", "")
+    """Image descriptions (the API key itself comes from ANTHROPIC_API_KEY)."""
     image_model: str = _env("IMAGE_MODEL", "claude-sonnet-5-5")
     image_effort: str = _env("IMAGE_EFFORT", "medium")
     image_concurrency: int = int(_env("IMAGE_CONCURRENCY", "8"))

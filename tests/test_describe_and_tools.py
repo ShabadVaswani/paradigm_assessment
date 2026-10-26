@@ -50,7 +50,7 @@ def test_prompt_includes_location_and_surrounding_text(tmp_path):
 def test_request_shape_on_claude_api(tmp_path):
     parsed = ImageDescription(kind="diagram", caption="c", description="d", visible_text="", adds_information=True)
     client = fake_client(SimpleNamespace(stop_reason="end_turn", stop_details=None, parsed_output=parsed))
-    settings = LLMSettings(provider="anthropic", image_model="claude-sonnet-5-5", image_effort="medium")
+    settings = LLMSettings(image_model="claude-sonnet-5-5", image_effort="medium")
     result = asyncio.run(describe_one(client, settings, record(tmp_path), tmp_path))
     assert result == parsed
     (call,) = client.beta.messages.calls
@@ -61,14 +61,6 @@ def test_request_shape_on_claude_api(tmp_path):
     image, text = call["messages"][0]["content"]
     assert image["type"] == "image" and image["source"]["media_type"] == "image/png"
     assert text["type"] == "text" and "Page: 617" in text["text"]
-
-
-def test_foundry_request_has_no_server_side_fallback(tmp_path):
-    parsed = ImageDescription(kind="other", caption="c", description="d", visible_text="", adds_information=False)
-    client = fake_client(SimpleNamespace(stop_reason="end_turn", stop_details=None, parsed_output=parsed))
-    asyncio.run(describe_one(client, LLMSettings(provider="foundry"), record(tmp_path), tmp_path))
-    (call,) = client.beta.messages.calls
-    assert "fallbacks" not in call and "betas" not in call
 
 
 def test_refusal_is_reported(tmp_path):

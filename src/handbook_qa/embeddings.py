@@ -111,8 +111,6 @@ def embed_items(items: list[tuple[str, str]], path: Path, settings: EmbedSetting
             store = _upsert(store, [i for i, _ in batch], [text_hash(t) for _, t in batch], vectors)
             store.save(path)
             log.info("  %d/%d (%.1fs for this batch)", start + len(batch), len(todo), time.perf_counter() - began)
-            if settings.pause_seconds:
-                time.sleep(settings.pause_seconds)
 
     # Keep exactly the current items, in index order (drops vectors for chunks that no longer exist).
     rows = store.lookup()

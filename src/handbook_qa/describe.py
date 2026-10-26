@@ -84,19 +84,16 @@ def _image_block(path: Path) -> dict:
 
 async def describe_one(client: anthropic.AsyncAnthropic, settings: LLMSettings, record: ImageRecord,
                        root: Path) -> ImageDescription:
-    request = dict(
+    response = await client.beta.messages.parse(
         model=settings.image_model,
         max_tokens=MAX_OUTPUT_TOKENS,
         output_config={"effort": settings.image_effort},
         output_format=ImageDescription,
         messages=[{"role": "user", "content": [_image_block(root / record.file),
                                                {"type": "text", "text": build_prompt(record)}]}],
-    )
-    if settings.provider == "anthropic":
         # Server-side fallback: if the model declines, the API reruns the request on a model that can answer.
-        # Not available on Foundry; there a refusal is reported as an error for that image.
-        request.update(betas=["server-side-fallback-2026-07-01"], fallbacks="default")
-    response = await client.beta.messages.parse(**request)
+        betas=["server-side-fallback-2026-07-01"], fallbacks="default",
+    )
     if response.stop_reason == "refusal":
         category = response.stop_details.category if response.stop_details else None
         raise DescriptionError(f"{record.image_id}: model declined (category={category})")
@@ -154,7 +151,7 @@ async def describe_all(records: list[ImageRecord], settings: LLMSettings, cache_
     todo = [r for r in records if force or not is_current(cache.get(r.image_id), r)]
     if not todo:
         return 0, []
-    client = async_client(settings)
+    client = async_client()
     limit = asyncio.Semaphore(settings.image_concurrency)
     errors: list[str] = []
 
@@ -167,8 +164,7 @@ async def describe_all(records: list[ImageRecord], settings: LLMSettings, cache_
                 log.warning("Could not describe %s: %s", record.image_id, exc)
                 return None
             log.info("Described %s", record.image_id)
-            return _cache_entry(record, description, source=f"anthropic-api:{settings.provider}",
-                                model=settings.image_model)
+            return _cache_entry(record, description, source="anthropic-api", model=settings.image_model)
 
     results = await asyncio.gather(*(run(r) for r in todo))
     done = [entry for entry in results if entry]
