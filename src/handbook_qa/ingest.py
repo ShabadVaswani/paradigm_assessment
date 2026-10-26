@@ -1,5 +1,6 @@
 """Build the retrieval data from the handbook PDF.
 
+    python -m handbook_qa.ingest setup          # fresh clone: download, extract, chunk, embed (no API calls)
     python -m handbook_qa.ingest all            # download, extract, describe images (Claude API), chunk, embed
     python -m handbook_qa.ingest download
     python -m handbook_qa.ingest extract        # PDF -> articles.json, rendered images, images.jsonl
@@ -85,6 +86,8 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="python -m handbook_qa.ingest", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("setup", help="download, extract, chunk, embed - uses the committed image descriptions and "
+                                 "vectors, so it makes no API calls")
     sub.add_parser("all")
     sub.add_parser("download")
     sub.add_parser("extract")
@@ -103,15 +106,15 @@ def main(argv: list[str] | None = None) -> None:
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
     settings = load_settings()
-    if args.command in ("all", "download"):
+    if args.command in ("setup", "all", "download"):
         download(settings)
-    if args.command in ("all", "extract"):
+    if args.command in ("setup", "all", "extract"):
         extract(settings)
     if args.command in ("all", "describe"):
         describe(settings, force=getattr(args, "force", False))
-    if args.command in ("all", "chunk"):
+    if args.command in ("setup", "all", "chunk"):
         chunk(settings)
-    if args.command in ("all", "embed"):
+    if args.command in ("setup", "all", "embed"):
         embed(settings)
     if args.command == "image-tasks":
         from .describe import write_tasks
