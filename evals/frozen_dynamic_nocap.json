@@ -1,0 +1,24 @@
+{
+  "model": "Xenova/ms-marco-MiniLM-L-6-v2",
+  "score": "raw MiniLM cross-encoder logit on (question, item text), as Reranker.score returns it",
+  "candidates_reranked": 50,
+  "first_stage": {
+    "dense_candidates": 50,
+    "bm25_candidates": 50,
+    "rrf_k": 60
+  },
+  "cutoff": -3.68,
+  "selection": "keep every reranked candidate with score >= cutoff, best first",
+  "min_kept": 3,
+  "max_kept": 50,
+  "max_kept_note": "no cap: limited only by the 50-candidate pool",
+  "rule": "Chosen by the user for the final face-off: the older cutoff (-3.68, from notebook 09) with no upper limit. Not tuned further.",
+  "in_sample_dev40": {
+    "source": "notebooks/09c_dynamic_no_cap.ipynb",
+    "chunk_recall": 0.862,
+    "mean_chunks": 13.7,
+    "max_chunks": 43
+  },
+  "date": "2026-10-26",
+  "note": "frozen before the final face-off on the 60 held-out questions; must not be changed after seeing those results"
+}
