@@ -464,3 +464,34 @@ My answers to the AI's questions:
 
 - **Decision 25's prompt was the wrong approach.** The AI had answered my earlier complaint by adding phrasing rules (a fixed opening, a closing gap sentence, banned words). The result still felt like a retrieval system and couldn't handle greetings. I caught it in use and asked for a role-and-goal prompt instead.
 - **Its rule check first failed.** The AI's first command for confirming the kept rules match the face-off prompt broke on shell quoting. It reran the check from a script file, and all six rules matched.
+
+## Continued (2026-10-26): a guard in front of the pipeline
+
+### Key prompts
+
+> "Right now, all questions are going through retrieval pipeline. Even simple hi message add a very light guardrail in front of the pipeline. Haiku 5.5 model, classifier that sorts each message So maybe greeting messages or clearly off topic. But yeah, when unsure, use the pipeline."
+
+### What the AI did / proposed
+
+- Checked the Claude API reference for Haiku 5.5:
+  - it has no server-side fallbacks;
+  - it thinks by default;
+  - effort `low` is the recommended lever over turning thinking off.
+- Added `guard.py` (one structured-output Haiku call that returns a route and a short reply, and fails open), `GuardSettings` (`GUARD`, `GUARD_MODEL`, `GUARD_EFFORT`), and the app wiring. Small talk shows a "Quick reply" footer, and the guard's time appears in the footer of normal answers.
+- Tests cover:
+  - the request shape;
+  - each fail-open case;
+  - a rejected key;
+  - small talk skipping retrieval in all three options;
+  - the guard being off.
+
+  70 pass.
+- Ran a Haiku stand-in on the 100 eval questions plus 25 probes (no API). Results are in decision 27.
+
+### Accepted / rejected
+
+- The guard and its "unsure goes to the pipeline" rule are my spec. Replying in the same call and keeping the guard out of the eval runner are the AI's choices; I haven't commented on them yet.
+
+### What the AI got wrong, and how it was caught
+
+- **The prompt-injection probe's expected routes were too narrow.** The AI listed only off-topic or handbook as acceptable. The stand-in chose small talk with a polite refusal, which is reasonable. The scoring script flagged it as wrong; the AI looked at the reply and recorded it as harmless rather than changing the prompt.
