@@ -37,10 +37,16 @@ class Evidence:
 class EvalQuestion:
     id: str
     question: str
-    type: str          # "existing" | "reworded" | "multi-section" | "multi-article"
+    type: str          # "existing" | "single" | "reworded" | "multi-section" | "multi-article" | "not-covered"
     answer: str
-    evidence: list[Evidence]
+    evidence: list[Evidence]   # empty for "not-covered" questions
     origin: str = ""
+    split: str = "dev"         # "dev": used to choose settings; "holdout": only used in the final face-off
+    notes: dict = field(default_factory=dict)  # not-covered questions: absence_check terms and near_miss
+
+    @property
+    def covered(self) -> bool:
+        return self.type != "not-covered"
 
 
 def load_eval_set(path: Path) -> list[EvalQuestion]:
@@ -79,9 +85,12 @@ def expected_chunks(question: EvalQuestion) -> list[frozenset[str]]:
 
 
 def chunk_recall(ranked_ids: list[str], question: EvalQuestion, k: int) -> float:
-    """Fraction of the question's expected chunks with a matching item in the top k."""
+    """Fraction of the question's expected chunks with a matching item in the top k. NaN for questions with no
+    expected chunks (the not-covered ones), so pandas means skip them."""
     top = set(ranked_ids[:k])
     expected = expected_chunks(question)
+    if not expected:
+        return float("nan")
     return sum(bool(location & top) for location in expected) / len(expected)
 
 

@@ -32,10 +32,11 @@ from .retrieval import DynamicSelection, Hit, Item, Retriever, load_corpus
 from .tools import ImageStore
 
 log = logging.getLogger("handbook_qa.compare")
-SYSTEMS = ("rag_top10", "rag_dynamic", "full_context")
+SYSTEMS = ("rag_top10", "rag_dynamic", "rag_dynamic_nocap", "full_context")
 OUT = ROOT / "artifacts" / "answers" / "api"
 EVAL_SET = ROOT / "evals" / "handbook_eval.jsonl"
-FROZEN = ROOT / "evals" / "frozen_dynamic_selection.json"
+FROZEN = ROOT / "evals" / "frozen_dynamic_selection.json"         # -3.898, clamped 3-15 (notebook 09b)
+FROZEN_NOCAP = ROOT / "evals" / "frozen_dynamic_nocap.json"       # -3.68, floor 3, no cap (final face-off)
 _write_lock = threading.Lock()
 
 
@@ -88,6 +89,8 @@ class Context:
             return self.retriever.search(question, k=self.settings.answer.top_k)
         if system == "rag_dynamic":
             return self.retriever.search_dynamic(question, DynamicSelection.load(FROZEN))
+        if system == "rag_dynamic_nocap":
+            return self.retriever.search_dynamic(question, DynamicSelection.load(FROZEN_NOCAP))
         raise ValueError(system)
 
 
