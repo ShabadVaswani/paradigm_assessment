@@ -134,3 +134,34 @@ One entry per design choice: the options considered, the evidence, what I chose,
   - jina turbo was its first pick because it reads whole chunks, but it ranked lowest and once pushed an image answer down to rank 4.
   - bge-m3 ranked best but at 43–48 s per question is too slow on this laptop's CPU for interactive use. It stays one setting away (`RERANK_MODEL`) for when the evals or a GPU justify it.
   - Revisit the choice when there is a real eval set.
+
+## 14. A 40-question eval set keyed by quotes, scored by chunk recall (2026-10-25)
+
+- **Options for the answer key:** chunk IDs picked from search results (circular, and breaks on re-chunking); chunk IDs picked by reading; verbatim quotes picked by reading and mapped to chunks by string matching. **Metric options:** rank of the first hit; recall of expected chunks at k.
+- **Evidence:** the 11-question spot-check couldn't separate methods, and rank-1 ignores multi-part answers (my call). Some of the old spot-check's expected IDs had come from search output.
+- **Chosen (my spec):**
+  - 40 questions: the 11 known-answer spot-check questions plus 29 new ones, mixing reworded questions with questions spanning 2-3 articles or sections.
+  - Answer key built by reading the handbook, not by running search.
+  - Scored by the fraction of expected chunks found.
+  - One table comparing dense only, BM25 only, fused without a reranker, and fused with a reranker, but not bge, which is too slow. Time per question included.
+  - The 40 questions become part of the final eval set.
+- **AI suggested:**
+  - Store evidence as verbatim quotes and map them to chunks at eval time by string matching, so the key survives re-chunking. An image-description quote also matches the image record.
+  - Have four Opus subagents write the drafts by area. They read plain-text dumps of the articles and were barred from the app's code, chunks and vectors. A validator checks every quote is verbatim, on one line and unique.
+  - Re-key the 11 old questions by reading too.
+  - Expected chunks = the distinct places the quotes live. Several quotes in one chunk count once; I asked for chunk-level scoring, and the first version had counted quotes.
+  - Report recall@5 and @10, plus the share of questions with all chunks found.
+  - During review the AI replaced one subagent question (A-09) whose evidence all sat in one chunk.
+- **Result** (`notebooks/08_retrieval_eval.ipynb`; rerankers rescore the top 30 fused results):
+
+  | method | chunk recall@5 | @10 | all chunks@5 | @10 | median s / question |
+  |---|---|---|---|---|---|
+  | dense only | 0.662 | 0.733 | 0.50 | 0.60 | 0.06 |
+  | BM25 only | 0.612 | 0.696 | 0.40 | 0.50 | 0.002 |
+  | fused, no rerank | 0.671 | 0.779 | 0.50 | 0.65 | 0.07 |
+  | fused + MiniLM-L-6 | 0.733 | 0.846 | 0.58 | 0.75 | 2.85 |
+  | fused + jina turbo | 0.681 | 0.796 | 0.53 | 0.68 | 3.68 |
+
+  Fusion beats either list alone at k = 10. MiniLM adds about 6 points at both k, for about 2.8 s per question. jina adds little. This supports keeping MiniLM as the default reranker (decision 13). Two findings from the breakdown by question type:
+  - On reworded questions, dense only scores 0.39 against BM25's 0.61, the opposite of what we expected.
+  - Multi-article questions are the weakest for every method (0.51-0.62 at k = 5).
