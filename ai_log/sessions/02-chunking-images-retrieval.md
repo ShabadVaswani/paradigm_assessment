@@ -358,3 +358,29 @@ My answers to the AI's questions:
 - **A misleading log alert.** The log watcher's error filter included "429" (the rate-limit code), so it fired on a normal line where an output token count happened to be 429. The AI recognised it as harmless.
 - **Notebook 11 would have drifted.** Its result files grew from 40 to 100 rows during the face-off. The AI noticed because the files are shared with the face-off, added the dev filter, re-ran it and confirmed the table was unchanged.
 - **One agent question was mislabelled.** It was called multi-section though its sections sit in one chunk (B-17). The AI caught it in review, when counting expected chunks per question type.
+
+## Continued (2026-10-26): app options and clean-up
+
+### Key prompts
+
+> "switch the app dynamic reg option to test it 3.68 no cap setting. remove any unused code paths, for example, key vault and foundry. And anything that was left behind from abandoned ideas. Create a README. Open with five basic lines or topics. Like what it does, how to run, default rect-opt-in, the one sentence finding, link to details, keep experiments, in how I chose this section"
+
+### What the AI did / proposed
+
+- Pointed the app's Dynamic option at `evals/frozen_dynamic_nocap.json`, updated its explanation screen, and added a test for it.
+- Removed the Key Vault and Foundry code, the azure packages, the unused fallback switch, `load_answer` and `pause_seconds`. It also removed the two experiment worktrees, their branches, and gitignored stand-in leftovers. Decision 23 lists what was removed and what was kept on purpose.
+- Rewrote the README: five opening lines, then setup, using the app, how it works, "How I chose this" with the experiments and the face-off table, notebooks, layout, limitations, and AI use.
+- Re-ran notebook 10 with the new function signatures; its outputs are unchanged.
+
+### Accepted / rejected
+
+- I chose what to switch and what to remove.
+- The AI's choices, which I haven't commented on yet:
+  - keeping the 3-15 setting for notebook 11's reproducibility;
+  - keeping the stand-in helpers.
+
+### What the AI got wrong, and how it was caught
+
+- **Notebook 10 couldn't load its saved answers.** It loaded all 100 questions, but has saved answers only for the 40 dev ones (`KeyError: 'A-13'`). It had the same problem as notebook 11 and hadn't been re-run since the held-out questions were added. Caught on re-running; fixed with the same dev filter, and the outputs were compared with the committed ones (identical).
+- **A first rebuild saved the notebook without outputs.** The editor had the file open, so the build could not replace it, and the run failed. The AI noticed because the diff deleted 900 lines and checked the outputs cell by cell. It then built into a temporary file and copied it over.
+- **An unsupported claim in the README draft.** The draft said bge-reranker "ranked best", but notebook 07 only measured speed and memory. Caught by checking against the old README and the notebooks; corrected to what the notebooks show.

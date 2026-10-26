@@ -321,3 +321,22 @@ One entry per design choice: the options considered, the evidence, what I chose,
 - **Chosen:** none yet; it's my call. The app keeps its defaults: Simple RAG = top 10, and the frozen 3-15 dynamic option.
 - **AI suggested:** keep top 10 as the default, offer the whole handbook when completeness matters more than cost, and work next on retrieval for reworded questions.
 - **API spend for the face-off:** about $33 ($17 answering, $16 judging).
+
+## 23. App options after the face-off, and removing unused code paths (2026-10-26)
+
+- **App options (my call):**
+  - Simple RAG (top 10) stays the default.
+  - Dynamic RAG now uses the setting tested in the face-off: cutoff -3.68, at least 3 passages, no upper limit (`evals/frozen_dynamic_nocap.json`). It replaces the 3-15 setting from notebook 09b.
+  - The whole handbook stays opt-in.
+- **Evidence:** decision 22. On the 60 held-out questions, no-cap dynamic was level with top 10 on fully right answers, at about the same cost.
+- **Removed (my call: "remove any unused code paths ... anything that was left behind from abandoned ideas"):**
+  - Key Vault and Azure Foundry support, from the client, the settings, `.env.example`, a test, and the azure packages in `pyproject.toml`. The key now only comes from `ANTHROPIC_API_KEY`.
+  - The "fallbacks off" branch. Server-side fallbacks are always on.
+  - `answer.load_answer` and `EmbedSettings.pause_seconds`, which nothing used.
+  - Both experiment worktrees and their branches; their notebooks and frozen files were already on main.
+  - Gitignored leftovers from an abandoned stand-in run of the 3-15 dynamic option.
+- **Kept on purpose:**
+  - The 3-15 setting (`evals/frozen_dynamic_selection.json`) and the `rag_dynamic` system in `compare.py`, so notebook 11 can still be re-run.
+  - The stand-in helpers (`write_task`, `image-tasks` / `import-descriptions`, the `get_image` CLI). They are how image descriptions and development answers were made without the API.
+- **README:** rewritten to open with five lines: what it does, how to run, default and opt-in options, the finding, and links. The experiments are in a "How I chose this" section.
+- **AI suggested:** what to keep for reproducibility (above).
