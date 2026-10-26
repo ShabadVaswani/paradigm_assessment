@@ -132,16 +132,22 @@ def _size(blocks: list[Block]) -> int:
     return sum(b.tokens + 1 for b in blocks)
 
 
+def _before_headings(blocks: list[Block], cut: int) -> int:
+    """Move a cut back past headings right before it, so a run like "## A" + "### B" stays together."""
+    while cut > 0 and blocks[cut - 1].kind == "heading":
+        cut -= 1
+    return cut
+
+
 def _best_cut(blocks: list[Block], min_tokens: int) -> int:
     """Where to cut a chunk that is about to overflow: at its last heading if the part before it is big enough,
     otherwise just before any headings at its end (so they move on with what follows them)."""
     for index in range(len(blocks) - 1, 0, -1):
-        if blocks[index].kind == "heading" and _size(blocks[:index]) >= min_tokens // 2:
-            return index
-    cut = len(blocks)
-    while cut > 0 and blocks[cut - 1].kind == "heading":
-        cut -= 1
-    return cut
+        if blocks[index].kind == "heading":
+            cut = _before_headings(blocks, index)
+            if cut > 0 and _size(blocks[:cut]) >= min_tokens // 2:
+                return cut
+    return _before_headings(blocks, len(blocks))
 
 
 def overlap_text(previous: list[Block], settings: ChunkSettings) -> str:
@@ -169,8 +175,10 @@ def pack(blocks: list[Block], settings: ChunkSettings, header_tokens: int) -> li
 
     for block in blocks:
         if block.kind == "heading" and _size(current) >= settings.min_tokens:
-            groups.append((overlap, current))
-            current, overlap = [], ""
+            cut = _before_headings(current, len(current))  # headings just added move on with this one
+            if cut > 0:
+                groups.append((overlap, current[:cut]))
+                current, overlap = current[cut:], ""
         elif current and size_with(block) > limit:
             cut = _best_cut(current, settings.min_tokens)
             if cut > 0:

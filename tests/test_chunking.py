@@ -53,6 +53,20 @@ def test_small_sections_are_merged_up_to_min_tokens():
     assert all(f"## Small {s}" in chunk.text for s in range(3))
 
 
+def test_consecutive_headings_stay_with_the_content_after_them():
+    # Found in the real output: "## Incident timeline" directly followed by "### October 21" ended up as the last
+    # line of one chunk while its subsection started the next.
+    elements = [Element("heading", "Summary", page=1, level=2),
+                Element("text", paragraph(0, 17), page=1),            # ~300 tokens, below min_tokens
+                Element("heading", "Incident timeline", page=1, level=2),
+                Element("heading", "October 21", page=1, level=3)]
+    elements += [Element("text", paragraph(100 + 10 * p, 6), page=1) for p in range(6)]  # overflows the chunk
+    chunks = chunk_article(article(elements), {}, SETTINGS)
+    for chunk in chunks:
+        assert not chunk.text.rstrip().splitlines()[-1].startswith("#"), chunk.text[-200:]
+    assert any("## Incident timeline\n\n### October 21" in c.text for c in chunks)
+
+
 def test_cut_inside_a_section_repeats_last_sentences():
     elements = [Element("heading", "One long section", page=1, level=2)]
     elements += [Element("text", paragraph(10 * p, 5), page=1) for p in range(12)]
