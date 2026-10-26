@@ -85,7 +85,10 @@ Every quote is checked automatically against the handbook text and its page.
 
 - **A colleague, not a search engine:** the assistant gives you the information you're after, pulled together
   from wherever it is in the handbook.
-- **Small talk:** it can handle "hi" and "what do you do?".
+- **Small talk:** "hi", "thanks" and "what do you do?" get a quick reply from a small classifier (Claude Haiku
+  5.5) in front of the pipeline, without searching the handbook. Clearly off-topic requests get a short
+  redirect. Anything that might be a real question goes through the full pipeline. Set `GUARD=off` to turn the
+  classifier off.
 - **When something isn't there:** it only mentions the handbook when it can't find something, and then says so
   plainly instead of guessing.
 - **Source of facts:** the handbook is its only source, and every factual statement carries a checked quote.
@@ -98,6 +101,8 @@ handbook.pdf
   -> images       77 images rendered and described by Claude (with the text around them)
   -> chunk        859 chunks of 400-800 tokens along headings; image descriptions inline
   -> embed        nomic-embed-text-v1.5, locally on the CPU (vectors committed)
+  -> guard        per message: Claude Haiku 5.5 sorts it; small talk and clearly off-topic messages get a quick
+                  reply, everything else (and anything it's unsure about, or if it fails) goes on
   -> retrieve     dense (cosine) + BM25, merged with reciprocal rank fusion
   -> rerank       local cross-encoder (ms-marco-MiniLM-L-6-v2)
   -> select       Simple: best 10 of 30  |  Dynamic: every one of 50 scoring >= -3.68 (at least 3)
@@ -199,7 +204,7 @@ Jupyter with the `.venv` kernel.
 
 ```
 src/handbook_qa/     the package
-  app.py               terminal app (python -m handbook_qa)
+  app.py               terminal app (python -m handbook_qa);  guard.py: Haiku classifier in front of the pipeline
   pdf_extract.py       PDF -> articles of typed elements
   images.py            image rendering + context;  describe.py: image descriptions with Claude
   chunking.py          structure- and token-aware chunker

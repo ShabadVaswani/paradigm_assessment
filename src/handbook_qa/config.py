@@ -106,6 +106,14 @@ class JudgeSettings:
 
 
 @dataclass(frozen=True)
+class GuardSettings:
+    """The classifier in front of the answering pipeline (guard.py)."""
+    enabled: bool = _env("GUARD", "on").lower() in ("on", "1", "true", "yes")
+    model: str = _env("GUARD_MODEL", "claude-haiku-5-5")
+    effort: str = _env("GUARD_EFFORT", "low")
+
+
+@dataclass(frozen=True)
 class Settings:
     paths: Paths = field(default_factory=Paths)
     chunks: ChunkSettings = field(default_factory=ChunkSettings)
@@ -114,6 +122,7 @@ class Settings:
     retrieval: RetrievalSettings = field(default_factory=RetrievalSettings)
     answer: AnswerSettings = field(default_factory=AnswerSettings)
     judge: JudgeSettings = field(default_factory=JudgeSettings)
+    guard: GuardSettings = field(default_factory=GuardSettings)
 
 
 def load_settings() -> Settings:

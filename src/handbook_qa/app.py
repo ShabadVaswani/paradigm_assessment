@@ -10,6 +10,9 @@ Three ways to answer (all use the same answering prompt and citation checks; onl
 1. Simple RAG - the 10 most relevant passages (the default recommendation).
 2. Dynamic RAG - every passage that clears the frozen relevance cutoff (-3.68, at least 3, no upper limit).
 3. Whole handbook - the entire handbook, prompt-cached between questions.
+
+Before any of them, a light guard (guard.py, Claude Haiku 5.5) answers small talk and clearly off-topic messages
+directly; everything else, and anything it is unsure about, goes through the chosen option.
 """
 from __future__ import annotations
 
@@ -89,6 +92,8 @@ class Reply:
     passages: int
     retrieval_seconds: float = 0.0
     answer_seconds: float = 0.0
+    route: str = "handbook"             # guard.Decision.route: "small_talk" and "off_topic" skip the pipeline
+    guard_seconds: float = 0.0
 
 
 def setup_help() -> str:
@@ -227,8 +232,18 @@ class Engine:
         raise ValueError(mode)
 
     def answer(self, mode: str, question: str) -> Reply:
-        from .answer import answer_question
+        from .answer import AnswerResult, HandbookAnswer, answer_question
         from .full_context import answer_full_context
+        guard_seconds = 0.0
+        if self.settings.guard.enabled:
+            from .guard import classify
+            # A short timeout and one retry: if the guard is slow or down, the question just goes to the pipeline.
+            decision = classify(self.client.with_options(max_retries=1, timeout=20), self.settings.guard, question)
+            guard_seconds = decision.seconds
+            if decision.route != "handbook":
+                answer = HandbookAnswer(coverage="not_needed", answer=decision.reply, citations=[])
+                result = AnswerResult(question, answer, [], source=f"guard:{self.settings.guard.model}")
+                return Reply(mode, question, result, {}, 0, route=decision.route, guard_seconds=guard_seconds)
         _, index, images = self._load_shared()
         started = time.perf_counter()
         if mode == "whole":
@@ -244,7 +259,8 @@ class Engine:
             result = answer_question(self.client, self.settings.answer, question, hits, index, images)
             titles = {hit.item.id: _title(hit.item) for hit in hits}
             passages = len(hits)
-        return Reply(mode, question, result, titles, passages, retrieval_seconds, time.perf_counter() - started)
+        return Reply(mode, question, result, titles, passages, retrieval_seconds, time.perf_counter() - started,
+                     guard_seconds=guard_seconds)
 
 
 # --- rendering ------------------------------------------------------------------------------------------------
@@ -273,8 +289,12 @@ def render_reply(reply: Reply) -> str:
             lines.append(f"      - {where}  ({status})")
     elif answer.coverage in ("full", "partial"):          # a factual answer should have quotes
         lines.append("(No quotes were given for this answer.)")
+    if reply.route != "handbook":
+        lines += [f"[Quick reply, no handbook search needed: {reply.guard_seconds:.1f}s]"]
+        return "\n".join(lines)
     images = getattr(reply.result, "images_viewed", [])
-    timing = (f"{reply.retrieval_seconds:.1f}s to find passages, " if reply.mode != "whole" else "")
+    timing = (f"{reply.guard_seconds:.1f}s to read the message, " if reply.guard_seconds else "")
+    timing += (f"{reply.retrieval_seconds:.1f}s to find passages, " if reply.mode != "whole" else "")
     lines += ["", f"[{MODE_NAMES[reply.mode]}: {reply.passages} {'articles' if reply.mode == 'whole' else 'passages'}, "
               f"{timing}{reply.answer_seconds:.1f}s to answer"
               + (f", looked at {len(images)} image(s)" if images else "") + "]"]
