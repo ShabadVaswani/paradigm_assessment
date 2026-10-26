@@ -375,3 +375,26 @@ One entry per design choice: the options considered, the evidence, what I chose,
   - The coverage label is still in the structured output for evaluation and the judge, but the app no longer shows the NOT COVERED / PARTLY COVERED banners.
 - **Not re-run:** the face-off results in notebooks 11 and 12 used the earlier prompt (commit 3f3bf7a). The new prompt is covered only by unit tests. The README's limitations say so.
 - **AI suggested:** keeping one prompt for every option rather than a separate app prompt, so a future re-run of the face-off measures what the app does.
+
+## 26. System prompt built around role and goal, not phrasing rules (2026-10-26)
+
+- **Problem (mine):** the assistant felt like a handbook retrieval system, not a helpful assistant. It couldn't handle "hi" or "what do you do", and it kept mentioning the handbook.
+- **My spec:**
+  - Rewrite the system prompt around role and goal, not rules for specific cases. The role is helping PostHog employees get answers about how the company works.
+  - The handbook is its only source of facts.
+  - Respond to what the person needs, like a knowledgeable colleague.
+  - Mention the handbook only when it can't find something.
+  - Keep the citation and grounding rules as they are.
+- **Changed:**
+  - **The prompt** is now three short paragraphs (role, source of facts, how to respond) followed by the five grounding and citation rules. The rules are unchanged; a test checks they appear word for word as in the face-off prompt (commit 3f3bf7a).
+  - **The phrasing rules from decision 25 are gone:** the fixed "The handbook doesn't cover this." opening, the closing gap sentence, and "never mention excerpts".
+- **Coverage label:**
+  - **New value:** `not_needed`, for messages that don't ask for information about PostHog, such as a greeting.
+  - **Where it's defined:** in the answer schema's field description, not as a prompt rule.
+  - **In the app:** a factual answer without quotes is still flagged, but a greeting isn't.
+- **Checked without the API**, with a Sonnet stand-in on Simple RAG retrieval:
+  - **"hi" and "What do you do?"** got short, natural replies labelled `not_needed`, with no citations.
+  - **The time-off question** was answered directly ("No. You do not need your manager's approval..."), with no mention of the handbook and both citations verified.
+  - **The referral-bonus question** said it couldn't find anything about a referral bonus, gave the one related fact with a verified citation, and suggested checking with the People team. That suggestion has no citation; it is advice rather than a handbook fact.
+- **Not re-run on the eval set:** the face-off numbers still come from the earlier prompt.
+- **AI suggested:** the `not_needed` label, so greetings aren't mislabelled as "not covered" and don't trigger the missing-quotes note.

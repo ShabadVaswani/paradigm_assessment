@@ -442,3 +442,25 @@ My answers to the AI's questions:
 ### What the AI got wrong, and how it was caught
 
 - **A muddled test assertion.** The AI's first check that no banner appears was a convoluted expression that could pass when it shouldn't. The AI rewrote it as a plain assertion before running the tests.
+
+## Continued (2026-10-26): an assistant, not a retrieval system
+
+### Key prompts
+
+> "Right now, the assistant really feels like handbook retrieval system rather than helpful assistant. It can't handle simple things like hi, what do you do, and it keeps mentioning the handbook in its answers. What we want is assistant that uses handbook to answer people's questions . It should just give the information they are looking for, like a knowledgeable colleague would. Also, instead of adding rules for specific cases, rewrite the system prompt around role and goal. It helps post hoc employees get answers about how the company works. The handbook is only source of its facts, and it should respond to what person actually needs the way a knowledgeable colleague would. Mentioning the handbook only when it can't find something. Keep the citation and grounding rules as they are."
+
+### What the AI did / proposed
+
+- Rewrote the system prompt as role, source of facts and how to respond, followed by the unchanged grounding and citation rules.
+- Proposed and added a `not_needed` coverage label for greetings and questions about the assistant. It is defined in the schema, not the prompt.
+- Updated the app's missing-quotes note, the tests and the README.
+- Checked four messages with a Sonnet stand-in (no API), then validated the replies with the real schema and the citation checker. Decision 26 has the results.
+
+### Accepted / rejected
+
+- The prompt direction is my spec. The `not_needed` label is the AI's suggestion; I haven't commented on it yet.
+
+### What the AI got wrong, and how it was caught
+
+- **Decision 25's prompt was the wrong approach.** The AI had answered my earlier complaint by adding phrasing rules (a fixed opening, a closing gap sentence, banned words). The result still felt like a retrieval system and couldn't handle greetings. I caught it in use and asked for a role-and-goal prompt instead.
+- **Its rule check first failed.** The AI's first command for confirming the kept rules match the face-off prompt broke on shell quoting. It reran the check from a script file, and all six rules matched.
