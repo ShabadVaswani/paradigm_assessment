@@ -256,3 +256,28 @@ One entry per design choice: the options considered, the evidence, what I chose,
   - **Caveat:** with 40 questions, differences of 1-3 questions are noise.
 - **Stand-in check:** the earlier subagent stand-ins agreed with the API judge on 87.5-97.5% of verdicts, depending on the dimension. So the notebook 10 results were a fair preview, but the API numbers replace them.
 - **Total API spend for this comparison:** about $14.60 ($9.23 answering, $5.38 judging), plus about $0.10 for the smoke test.
+
+## 19. No paid API calls during development; Claude Code stand-ins until the final face-off (2026-10-25)
+
+- **Chosen (my rule):** development and test runs use Claude Code subagent stand-ins, which run on my subscription. The API key is only for the final face-off.
+- **AI suggested:** keep using fake clients in the unit tests, and give the app a `--retrieval-only` mode, so the whole app can be exercised locally without the API.
+
+## 20. Dynamic selection without the 15-chunk cap: not adopted; defaults and the frozen cutoff unchanged (2026-10-25)
+
+- **Question (mine):** what happens at cutoffs -3.68, -3.8 and -3.898 with no upper limit, compared with fixed top 10 and top 15? Report recall, mean and max chunks, and tokens. Don't change the defaults or the frozen results.
+- **Evidence:** `notebooks/09c_dynamic_no_cap.ipynb`, run by a Sonnet subagent with local models only. It uses the 50 reranked candidates and keeps the floor of 3. It's in-sample, on the 40 questions.
+
+  | rule | recall | all chunks | mean / max chunks | mean / max tokens (cl100k) |
+  |---|---|---|---|---|
+  | -3.68, no cap | 0.862 | 0.725 | 13.7 / 43 | 7,232 / 24,998 |
+  | -3.8, no cap | 0.862 | 0.725 | 14.1 / 44 | 7,474 / 25,627 |
+  | -3.898, no cap | 0.871 | 0.750 | 14.5 / 45 | 7,657 / 25,950 |
+  | fixed top 10 | 0.846 | 0.750 | 10 / 10 | 5,328 / 6,064 |
+  | fixed top 15 | 0.846 | 0.750 | 15 / 15 | 7,967 / 8,878 |
+  | frozen (-3.898, 3-15) | 0.825 | 0.725 | 9.7 / 15 | 5,120 / 8,878 |
+
+  - Without the cap, recall rises by 0.02-0.03 over top 10, about one question's worth. The share of questions with all chunks found doesn't improve.
+  - The cost is about 40% more tokens on average and up to 4× more on the worst question.
+  - Top 15 adds nothing over top 10.
+- **Chosen:** nothing changed. Simple RAG (top 10) stays the default, and the frozen cutoff and its file are untouched.
+- **AI suggested:** the same, as did the subagent. The gain is small and in-sample, and the context size is unpredictable.
