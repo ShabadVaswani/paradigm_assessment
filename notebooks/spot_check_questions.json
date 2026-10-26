@@ -1,0 +1,17 @@
+{
+  "_note": "Hand-written sanity checks for notebooks 06 and 07, not an evaluation set. 'expected' lists ids (or id prefixes) of items that answer the question; an empty list means no known answer in the handbook PDF.",
+  "questions": [
+    {"question": "Who should I ask for new artwork or merch?", "expected": ["brand/art-requests"]},
+    {"question": "If I start on July 21st, how is my commission calculated during ramp?", "expected": ["img-p0617-x2727", "growth/sales/new-hire-onboarding#06"]},
+    {"question": "Which communication channels are best and worst at PostHog?", "expected": ["img-p0041-x258"]},
+    {"question": "How much credit do Y Combinator companies get?", "expected": ["brand/startups"]},
+    {"question": "How do I sign my git commits?", "expected": ["engineering/security#02"]},
+    {"question": "How do I raise an incident?", "expected": ["engineering/operations/incidents"]},
+    {"question": "How much RAM does the 4-core codespace have?", "expected": ["img-p0355-x1727"]},
+    {"question": "How do we handle refund requests?", "expected": ["growth/sales/refunds"]},
+    {"question": "What are the stages of the engineering hiring process?", "expected": ["people/hiring-process/engineering-hiring"]},
+    {"question": "What is the policy for spending company money?", "expected": ["people/spending-money"]},
+    {"question": "What is the #ask-max channel for?", "expected": []},
+    {"question": "What should the logo never look like?", "expected": ["img-p0038-x244"]}
+  ]
+}
