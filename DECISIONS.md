@@ -358,3 +358,20 @@ One entry per design choice: the options considered, the evidence, what I chose,
 - **AI suggested:**
   - Also checking a key that comes from the environment, so a stale key is caught at startup and not on the first question.
   - Reading piped input with `readline` when stdin isn't a terminal, because `getpass` on Windows ignores pipes and waits for the console.
+
+## 25. Answer the question first; coverage label stays internal (2026-10-26)
+
+- **Problem (mine):** answers read like a description of what the handbook covers, not like answers to the question.
+- **My spec:**
+  - Answer directly first, like a knowledgeable colleague combining the sources.
+  - Mention a gap only if it matters, in one short sentence at the end.
+  - If nothing is covered, start with "The handbook doesn't cover this."
+  - Never mention excerpts or passages.
+  - Keep the coverage label internal and remove the app's banners.
+  - Don't re-run the API.
+- **Changed:**
+  - The answering system prompt, shared by all three options.
+  - The grounding, citation, image and missing-name rules are unchanged.
+  - The coverage label is still in the structured output for evaluation and the judge, but the app no longer shows the NOT COVERED / PARTLY COVERED banners.
+- **Not re-run:** the face-off results in notebooks 11 and 12 used the earlier prompt (commit 3f3bf7a). The new prompt is covered only by unit tests. The README's limitations say so.
+- **AI suggested:** keeping one prompt for every option rather than a separate app prompt, so a future re-run of the face-off measures what the app does.

@@ -415,3 +415,30 @@ My answers to the AI's questions:
 
 - **The first version hung when input was piped.** On Windows, `getpass` reads the console directly and ignores piped input. A test run with no console hung until the timeout; the AI added a stdin fallback for non-terminals.
 - **Not fixed: redirecting from the NUL device still waits.** Python reports Windows' NUL device as a terminal, so `< NUL` still waits for console input. Real piped input and a normal terminal work.
+
+## Continued (2026-10-26): answers that answer the question
+
+### Key prompts
+
+> "answer reads like what the handbook covers instead of like answering the actual questions. Change the answering prompt . Answer the question directly first like a knowledgeable colleague combining the resources . Mention a gap only if it matters . In short sentence at the end . If nothing is covered then start with the handbook doesn't cover this . Never mention excerpts or passages . Keep the coverage label internal and remove the banners . Don't rerun the API"
+
+### What the AI did / proposed
+
+- Rewrote the answering prompt:
+  - a direct answer first, combined across sources;
+  - one short closing sentence for gaps that matter;
+  - "The handbook doesn't cover this." as the opening when nothing answers;
+  - no mention of excerpts or passages.
+
+  The grounding and citation rules are unchanged.
+- Removed the coverage banners from the app. The label stays in the structured output.
+- Updated the tests and the README, and noted in the README and `answer.py` that the measured results used the earlier prompt.
+- No API calls.
+
+### Accepted / rejected
+
+- The behaviour is my spec. The AI's suggestion to keep one prompt for every option is in decision 25.
+
+### What the AI got wrong, and how it was caught
+
+- **A muddled test assertion.** The AI's first check that no banner appears was a convoluted expression that could pass when it shouldn't. The AI rewrote it as a plain assertion before running the tests.
