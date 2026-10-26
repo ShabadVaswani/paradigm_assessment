@@ -32,7 +32,7 @@ from .retrieval import DynamicSelection, Hit, Item, Retriever, load_corpus
 from .tools import ImageStore
 
 log = logging.getLogger("handbook_qa.compare")
-SYSTEMS = ("rag_top10", "rag_dynamic", "rag_dynamic_nocap", "full_context")
+SYSTEMS = ("rag_top10", "rag_top15", "rag_dynamic", "rag_dynamic_nocap", "full_context")
 OUT = ROOT / "artifacts" / "answers" / "api"
 EVAL_SET = ROOT / "evals" / "handbook_eval.jsonl"
 FROZEN = ROOT / "evals" / "frozen_dynamic_selection.json"         # -3.898, clamped 3-15 (notebook 09b)
@@ -87,6 +87,8 @@ class Context:
     def retrieve(self, system: str, question: str) -> list[Hit]:
         if system == "rag_top10":
             return self.retriever.search(question, k=self.settings.answer.top_k)
+        if system == "rag_top15":  # same pipeline as top 10 (30 reranked candidates), keeping 15
+            return self.retriever.search(question, k=15)
         if system == "rag_dynamic":
             return self.retriever.search_dynamic(question, DynamicSelection.load(FROZEN))
         if system == "rag_dynamic_nocap":
