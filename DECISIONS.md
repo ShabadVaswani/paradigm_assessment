@@ -340,3 +340,21 @@ One entry per design choice: the options considered, the evidence, what I chose,
   - The stand-in helpers (`write_task`, `image-tasks` / `import-descriptions`, the `get_image` CLI). They are how image descriptions and development answers were made without the API.
 - **README:** rewritten to open with five lines: what it does, how to run, default and opt-in options, the finding, and links. The experiments are in a "How I chose this" section.
 - **AI suggested:** what to keep for reproducibility (above).
+
+## 24. No retrieval-only mode: ask for a key at startup instead (2026-10-26)
+
+- **My spec:**
+  - Remove retrieval-only mode.
+  - With no key, explain in 2-3 lines how to set one permanently, then ask for a key with hidden input.
+  - Use the typed key for the current session only. Never print or save it.
+  - Check it with a free call, and give a clear message if it's rejected.
+- **How it works:**
+  - **Hidden input:** `getpass` in a terminal.
+  - **Check:** `models.list(limit=1)`, which is free.
+    - A 401 or 403 gives a plain message, with up to three tries; Enter quits.
+    - If the API can't be reached, the app exits with a message.
+  - **Session only:** the typed key goes straight to the app's client. It is not written to `os.environ` or any file.
+  - **The setup lines depend on the OS:** `setx` on Windows, a shell profile elsewhere, or `.env`.
+- **AI suggested:**
+  - Also checking a key that comes from the environment, so a stale key is caught at startup and not on the first question.
+  - Reading piped input with `readline` when stdin isn't a terminal, because `getpass` on Windows ignores pipes and waits for the console.

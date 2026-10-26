@@ -384,3 +384,34 @@ My answers to the AI's questions:
 - **Notebook 10 couldn't load its saved answers.** It loaded all 100 questions, but has saved answers only for the 40 dev ones (`KeyError: 'A-13'`). It had the same problem as notebook 11 and hadn't been re-run since the held-out questions were added. Caught on re-running; fixed with the same dev filter, and the outputs were compared with the committed ones (identical).
 - **A first rebuild saved the notebook without outputs.** The editor had the file open, so the build could not replace it, and the run failed. The AI noticed because the diff deleted 900 lines and checked the outputs cell by cell. It then built into a temporary file and copied it over.
 - **An unsupported claim in the README draft.** The draft said bge-reranker "ranked best", but notebook 07 only measured speed and memory. Caught by checking against the old README and the notebooks; corrected to what the notebooks show.
+
+## Continued (2026-10-26): API key prompt instead of retrieval-only mode
+
+### Key prompts
+
+> "the application has retrieval-only mode, I want you to remove it. Instead, if no API key is found at startup, explain in 2 to 3 lines how to set up Anthropic API key permanently. Then ask for key with hidden input. Use it for current session only. Never print or save it . Then check it with a free call. Example, listing models or something. And give a clear message if it's rejected. Also update the README and tests with respect to this."
+
+### What the AI did / proposed
+
+- Removed retrieval-only mode, its flag and its display code.
+- Added a three-line setup message, a hidden key prompt, and a free `models.list` check with up to three tries. A key from the environment is also checked.
+- Tests:
+  - The key never appears in the output.
+  - A key from the environment is used without asking.
+  - A rejected key is reported and asked for again.
+  - Enter quits.
+  - The check calls `models.list`.
+- Updated the README and `.env.example`.
+- Checked against the real API (free calls only): a made-up key was rejected with the clear message, and my key was accepted. The key itself was never printed.
+
+### Accepted / rejected
+
+- The behaviour is my spec.
+- The AI's additions (decision 24), which I haven't commented on yet:
+  - checking keys that come from the environment;
+  - the fallback for piped input.
+
+### What the AI got wrong, and how it was caught
+
+- **The first version hung when input was piped.** On Windows, `getpass` reads the console directly and ignores piped input. A test run with no console hung until the timeout; the AI added a stdin fallback for non-terminals.
+- **Not fixed: redirecting from the NUL device still waits.** Python reports Windows' NUL device as a terminal, so `< NUL` still waits for console input. Real piped input and a normal terminal work.
