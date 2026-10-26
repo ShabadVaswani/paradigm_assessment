@@ -56,6 +56,16 @@ class AnswerResult:
     images_viewed: list[str] = field(default_factory=list)
     checks: list[CitationCheck] = field(default_factory=list)
     source: str = ""
+    usage: dict = field(default_factory=dict)   # summed over all requests for this question (API runs only)
+
+
+USAGE_FIELDS = ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
+
+
+def add_usage(total: dict, usage) -> None:
+    for name in USAGE_FIELDS:
+        total[name] = total.get(name, 0) + (getattr(usage, name, None) or 0)
+    total["requests"] = total.get("requests", 0) + 1
 
 
 def allowed_images(hits: list[Hit]) -> list[str]:
@@ -99,6 +109,7 @@ def run_answer(client: anthropic.Anthropic, llm: LLMSettings, settings: AnswerSe
     against `excerpts`. Every system (RAG or whole handbook) goes through here; only the context differs."""
     messages: list[dict] = [{"role": "user", "content": user_content}]
     viewed: list[str] = []
+    usage: dict = {}
     for _ in range(settings.max_tool_rounds + 1):
         request = dict(
             model=settings.model, max_tokens=16000,
@@ -109,6 +120,7 @@ def run_answer(client: anthropic.Anthropic, llm: LLMSettings, settings: AnswerSe
         if llm.provider == "anthropic":
             request.update(betas=[FALLBACK_BETA], fallbacks="default")
         response = client.beta.messages.parse(**request)
+        add_usage(usage, getattr(response, "usage", None))
 
         if response.stop_reason == "refusal":
             raise RuntimeError(f"Model declined: {response.stop_details}")
@@ -135,7 +147,7 @@ def run_answer(client: anthropic.Anthropic, llm: LLMSettings, settings: AnswerSe
             raise RuntimeError(f"No structured answer (stop_reason={response.stop_reason})")
         return AnswerResult(question, response.parsed_output, list(excerpts), viewed,
                             check_citations(response.parsed_output.citations, excerpts, index),
-                            source=f"anthropic-api:{llm.provider}:{settings.model}")
+                            source=f"anthropic-api:{llm.provider}:{settings.model}", usage=usage)
     raise RuntimeError(f"Still calling tools after {settings.max_tool_rounds} rounds")
 
 

@@ -16,7 +16,7 @@ from typing import Literal
 import anthropic
 from pydantic import BaseModel, Field
 
-from .answer import FALLBACK_BETA, AnswerResult
+from .answer import FALLBACK_BETA, AnswerResult, add_usage
 from .config import JudgeSettings, LLMSettings
 from .evaluation import EvalQuestion
 
@@ -87,7 +87,8 @@ Grade the assistant's answer."""
 
 
 def judge_one(client: anthropic.Anthropic, llm: LLMSettings, settings: JudgeSettings, question: EvalQuestion,
-              result: AnswerResult, excerpts_message: str) -> Judgement:
+              result: AnswerResult, excerpts_message: str, usage: dict | None = None) -> Judgement:
+    """Grade one answer. Token usage is added to `usage` when given."""
     request = dict(
         model=settings.model, max_tokens=16000,
         system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
@@ -97,6 +98,8 @@ def judge_one(client: anthropic.Anthropic, llm: LLMSettings, settings: JudgeSett
     if llm.provider == "anthropic":
         request.update(betas=[FALLBACK_BETA], fallbacks="default")
     response = client.beta.messages.parse(**request)
+    if usage is not None:
+        add_usage(usage, getattr(response, "usage", None))
     if response.stop_reason in ("refusal", "max_tokens") or response.parsed_output is None:
         raise RuntimeError(f"No judgement for {question.id} (stop_reason={response.stop_reason})")
     return response.parsed_output
