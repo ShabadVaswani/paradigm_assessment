@@ -207,3 +207,52 @@ One entry per design choice: the options considered, the evidence, what I chose,
   - The cutoff is fragile: moving it ±0.25 changes recall from 0.812 to 0.858.
 - **Chosen:** none yet; it's my call. The pipeline stays on fixed top 10, and the experiment stays on its branch, not merged.
 - **AI suggested:** don't adopt, as the subagent recommended. Revisit with a held-out question set or a reranker whose scores are calibrated.
+
+## 17. Freeze the dynamic cutoff at -3.898 (50 reranked candidates) before the final comparison (2026-10-25)
+
+- **Options:** a re-run of the dynamic-selection experiment with 50 reranked candidates instead of 30, sweeping cutoffs above and below -3.68, compared with fixed top k at the same average number of chunks, cross-validated on the 40 questions.
+- **Evidence:** a subagent ran it in its own git worktree (`notebooks/09b_dynamic_selection_50.ipynb`).
+  - The rule was stated before any cross-validation: the highest chunk recall with mean chunks kept ≤ 10, ties broken by fewer chunks, then the higher cutoff.
+  - In-sample: 0.825 recall at 9.7 chunks.
+  - Repeated 5-fold: 0.809 at 9.5 chunks, which is 0.027 below fixed k at the same average (95% interval -0.066 to +0.007).
+  - At every budget tested, the cross-validated point estimates are below fixed k. Reranking 50 instead of 30 found no extra expected chunks and is slower (4.9 s vs 3.3 s per question).
+- **Chosen (my spec):** pick the best cutoff and freeze it for the final comparison; it must not change after seeing the results.
+  - The frozen file was committed to main (`f6bcbc2`) before any of the final answers.
+  - Notebook 11 asserts that order from the git history.
+  - The main pipeline reproduces the experiment's numbers exactly with the frozen file: 0.825 recall, 9.725 chunks.
+- **AI suggested:** the budget constraint, mean chunks ≤ 10, the same as the top-10 system. Without it, "best recall" would simply keep 15 every time.
+
+## 18. Final comparison: RAG top 10, RAG with the frozen dynamic cutoff, and the whole handbook (2026-10-25)
+
+- **Setup (my spec):**
+  - Three systems on the 40 eval questions, all answered by Claude Sonnet 5.5 and judged by Claude Opus 5.5 through the real API, once I added a key.
+  - My choices: wait for the key rather than use stand-ins for the whole-handbook run, then run all three through the API (~$15).
+  - Same prompt, schema, tool and citation checks for all three; only the context differs.
+- **AI suggested:**
+  - Running all three through the API, not only the whole-handbook baseline, so that provenance is the same for every system.
+  - Caching the 673k-token handbook between questions.
+  - A resumable runner that records token usage per call.
+  - Stopping the stand-in answering agents as soon as the key worked.
+  - Moving the key I'd pasted into `.env.example` (a tracked file) into the gitignored `.env` before anything was committed.
+- **Result** (`notebooks/11_final_comparison.ipynb`):
+
+  | | RAG, top 10 | RAG, dynamic | Whole handbook |
+  |---|---|---|---|
+  | context per question | 10 chunks, ~10k tokens | 9.7 chunks, ~10k | 254 articles, ~673k (cached) |
+  | chunk recall of context | 0.846 | 0.825 | 1.0 |
+  | citations correct | 99.5% | 99.0% | 98.5% |
+  | judge: correctness | 0.96 | 0.95 | 0.99 |
+  | judge: completeness | 0.86 | 0.83 | 0.94 |
+  | judge: groundedness | 0.96 | 0.95 | 0.90 |
+  | judge: coverage honesty | 0.95 | 0.98 | 0.95 |
+  | fully right on all four | 72.5% | 67.5% | 65% |
+  | answer cost, 40 questions | $0.97 | $0.94 | $7.33 |
+  | median answer time (excl. retrieval) | 4.9 s | 4.8 s | 9.2 s |
+
+- **What it shows:**
+  - **Whole handbook:** answers the questions retrieval misses. It reaches 0.94 completeness, and does best on multi-article questions (0.92 against 0.71) and reworded ones (1.00 against 0.78). But it costs about 7.5× more per answer and takes twice as long. It also adds more small unsupported details: 8 against 3 for RAG.
+  - **RAG top 10:** has the highest share of fully right answers and the best groundedness, at a fraction of the cost.
+  - **Dynamic cutoff:** came out slightly below top 10, as its cross-validation predicted. Top 10 stays the RAG default.
+  - **Caveat:** with 40 questions, differences of 1-3 questions are noise.
+- **Stand-in check:** the earlier subagent stand-ins agreed with the API judge on 87.5-97.5% of verdicts, depending on the dimension. So the notebook 10 results were a fair preview, but the API numbers replace them.
+- **Total API spend for this comparison:** about $14.60 ($9.23 answering, $5.38 judging), plus about $0.10 for the smoke test.
