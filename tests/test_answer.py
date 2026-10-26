@@ -121,3 +121,25 @@ def test_default_models():
     from handbook_qa.config import JudgeSettings
     assert AnswerSettings().model == "claude-sonnet-5-5"
     assert JudgeSettings().model == "claude-opus-5-5"
+
+
+def test_full_context_caches_the_handbook_and_checks_citations_against_articles():
+    from handbook_qa.full_context import article_items, handbook_document, answer_full_context, user_content
+
+    items = article_items([ARTICLE], {})
+    assert [i.id for i in items] == ["people/spending"]
+    document = handbook_document(items, INDEX)
+    assert document.startswith("The complete PostHog handbook") and "[page 8]" in document
+
+    content = user_content(document, "Laptop budget?")
+    assert content[0]["cache_control"] == {"type": "ephemeral"} and content[1]["text"] == "Question: Laptop budget?"
+
+    final = HandbookAnswer(coverage="full", answer="Up to $1,000 [1].",
+                           citations=[Citation(source_id="people/spending", page=7,
+                                               quote="You can spend up to $1,000 on a laptop without asking.")])
+    messages = FakeMessages([SimpleNamespace(stop_reason="end_turn", parsed_output=final, content=[])])
+    client = SimpleNamespace(beta=SimpleNamespace(messages=messages))
+    result = answer_full_context(client, LLMSettings(), AnswerSettings(), "Laptop budget?", items, document,
+                                 INDEX, FakeImages())
+    assert [c.ok for c in result.checks] == [True]
+    assert messages.calls[0]["messages"][0]["content"][0]["text"] == document

@@ -66,10 +66,10 @@ def allowed_images(hits: list[Hit]) -> list[str]:
     return list(dict.fromkeys(ids))
 
 
-def build_user_message(question: str, hits: list[Hit], index: PageIndex) -> str:
-    parts = ["Handbook excerpts, most relevant first:\n"]
-    for hit in hits:
-        item = hit.item
+def render_excerpts(items: list[Item], index: PageIndex, heading: str) -> str:
+    """Items as <excerpt> blocks with page markers, under a one-line heading."""
+    parts = [heading + "\n"]
+    for item in items:
         if item.kind == "chunk":
             source, pages = item.record["article_path"], "{}-{}".format(*item.record["pages"])
         else:
@@ -77,15 +77,27 @@ def build_user_message(question: str, hits: list[Hit], index: PageIndex) -> str:
             source, pages = occurrence["article_path"], str(occurrence["page"])
         parts.append(f'<excerpt id="{item.id}" kind="{item.kind}" source="{source}" pages="{pages}">\n'
                      f"{excerpt_with_pages(item, index)}\n</excerpt>\n")
-    parts.append(f"Question: {question}")
     return "\n".join(parts)
+
+
+def build_user_message(question: str, hits: list[Hit], index: PageIndex) -> str:
+    excerpts = render_excerpts([hit.item for hit in hits], index, "Handbook excerpts, most relevant first:")
+    return f"{excerpts}\nQuestion: {question}"
 
 
 def answer_question(client: anthropic.Anthropic, llm: LLMSettings, settings: AnswerSettings, question: str,
                     hits: list[Hit], index: PageIndex, images: ImageStore) -> AnswerResult:
-    """Run the model (with get_image available) until it returns a structured answer, then check citations."""
-    permitted = set(allowed_images(hits))
-    messages: list[dict] = [{"role": "user", "content": build_user_message(question, hits, index)}]
+    """Answer from retrieved excerpts (RAG)."""
+    return run_answer(client, llm, settings, question, build_user_message(question, hits, index),
+                      {hit.item.id: hit.item for hit in hits}, set(allowed_images(hits)), index, images)
+
+
+def run_answer(client: anthropic.Anthropic, llm: LLMSettings, settings: AnswerSettings, question: str,
+               user_content: str | list[dict], excerpts: dict[str, Item], permitted: set[str], index: PageIndex,
+               images: ImageStore) -> AnswerResult:
+    """Run the model (with get_image available) until it returns a structured answer, then check its citations
+    against `excerpts`. Every system (RAG or whole handbook) goes through here; only the context differs."""
+    messages: list[dict] = [{"role": "user", "content": user_content}]
     viewed: list[str] = []
     for _ in range(settings.max_tool_rounds + 1):
         request = dict(
@@ -121,7 +133,6 @@ def answer_question(client: anthropic.Anthropic, llm: LLMSettings, settings: Ans
             continue
         if response.parsed_output is None:
             raise RuntimeError(f"No structured answer (stop_reason={response.stop_reason})")
-        excerpts = {hit.item.id: hit.item for hit in hits}
         return AnswerResult(question, response.parsed_output, list(excerpts), viewed,
                             check_citations(response.parsed_output.citations, excerpts, index),
                             source=f"anthropic-api:{llm.provider}:{settings.model}")
