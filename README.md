@@ -1,28 +1,22 @@
 # PostHog handbook Q&A
 
-Ask questions about the PostHog company handbook (a 1,076-page PDF) and get answers that come only from the handbook.
-Every answer quotes the handbook word for word, with page numbers, and says plainly when the handbook doesn't cover
-the question.
-
-The terminal app offers three ways to answer, so you can compare them:
-
-| option | what the AI reads | fully right on 60 held-out questions | cost / question |
-|---|---|---|---|
-| **1. Simple RAG** (default) | the 10 most relevant passages | **75%** | ~$0.02 |
-| **2. Dynamic RAG** | every passage above a relevance cutoff (3-15) | not in the face-off (67.5% on the 40 dev questions) | ~$0.02 |
-| **3. Whole handbook** | the entire handbook (~673k tokens, cached) | 75% (more complete, less grounded) | ~$0.14 (first ~$1.80) |
-
-"Fully right" means the judge (Claude Opus 5.5) rated the answer correct, complete, grounded in the quotes, and
-honest about what isn't covered. All three use Claude Sonnet 5.5 to answer. Every system correctly declined all 10
-held-out questions the handbook doesn't cover. See [Results](#results).
+- **What it does:** answers questions about the PostHog company handbook (a 1,076-page PDF) using only the handbook.
+  Every claim comes with a word-for-word quote and its page number, and the app says plainly when the handbook
+  doesn't cover a question.
+- **How to run:** `pip install -e .`, then `python -m handbook_qa.ingest setup` once, set `ANTHROPIC_API_KEY`, and run
+  `python -m handbook_qa`. Details are in [Setup](#setup).
+- **Default and opt-in:** **Simple RAG** (the 10 most relevant passages) is the default. **Dynamic RAG** (every
+  passage above a relevance cutoff) and **Whole handbook** (the entire handbook in context) are opt-in from the menu.
+- **Finding:** on 60 held-out questions all three were fully right about 75% of the time. The whole handbook was
+  more complete but less grounded and cost about 7× as much, so simple RAG is the default.
+- **Details:** [How I chose this](#how-i-chose-this), [DECISIONS.md](DECISIONS.md),
+  [notebooks/12_final_faceoff.ipynb](notebooks/12_final_faceoff.ipynb).
 
 ---
 
-## Quick start
+## Setup
 
-**Requirements:** Python 3.11+, about 2 GB of free RAM, and about 1 GB of disk (the handbook PDF and two small local
-models). A Claude API key is needed to generate answers; without one the app still runs and shows which passages each
-option would use.
+You need Python 3.11+, about 2 GB of free RAM, and about 1 GB of disk for the PDF and two small local models.
 
 ```bash
 git clone <this repo> && cd paradigm_assessment
@@ -33,23 +27,16 @@ pip install -e ".[dev]"                   # or: uv pip install -e ".[dev]"
 python -m handbook_qa.ingest setup        # one-off, a few minutes; makes no API calls
 ```
 
-`ingest setup` downloads the handbook (50 MB, checked against a SHA-256), extracts and chunks it, and loads the
-committed embeddings. Image descriptions and vectors are committed, so nothing has to be described or embedded again.
-The first run also downloads the two local models (nomic-embed-text-v1.5, ~0.5 GB; a MiniLM reranker, ~0.1 GB).
-
-**API key:** copy `.env.example` to `.env` (gitignored) and fill in **one** of:
-
-- `ANTHROPIC_API_KEY=...`, or
-- `AZURE_KEY_VAULT_URL=...` with `ANTHROPIC_KEY_SECRET_NAME=...`. The key is read from Azure Key Vault with
-  `DefaultAzureCredential`, for example after `az login`.
-
-`LLM_PROVIDER=foundry` with `ANTHROPIC_FOUNDRY_RESOURCE=...` uses Claude on Microsoft Foundry instead.
-
-**Run:**
+- **What `ingest setup` does:** downloads the handbook (50 MB, checked against a SHA-256), extracts and chunks it,
+  and loads the committed image descriptions and embeddings. Nothing is described or embedded again.
+- **First run:** it also downloads the two local models (nomic-embed-text-v1.5, ~0.5 GB, and a MiniLM reranker,
+  ~0.1 GB).
+- **API key:** put `ANTHROPIC_API_KEY` in your environment, or in a `.env` file (gitignored; see `.env.example`).
+  Without a key, the app starts in retrieval-only mode and shows which passages each option would use.
 
 ```bash
 python -m handbook_qa                     # or: handbook-qa
-python -m handbook_qa --retrieval-only    # no API calls: shows the passages each option would use
+python -m handbook_qa --retrieval-only    # no API calls
 ```
 
 ## Using the app
@@ -66,9 +53,10 @@ python -m handbook_qa --retrieval-only    # no API calls: shows the passages eac
   q  Quit
 ```
 
-- **4** explains the three options in plain words.
+- **4** explains the options in plain words.
 - **1-3** each take you to a question prompt. Type `menu` to go back, or `quit` to exit.
-- Option 3 asks for confirmation first, because it sends the whole handbook with every question.
+- **Option 3** asks first, because it sends the whole handbook with each question: about $1.80 for the first
+  question, then about $0.14 each while the handbook stays cached (5 minutes).
 
 An answer looks like this:
 
@@ -83,9 +71,11 @@ Quotes from the handbook:
 [Simple RAG: 10 passages, 0.4s to find passages, 4.9s to answer]
 ```
 
-Every quote is checked automatically against the handbook text and its page. When the handbook doesn't cover a
-question, the answer starts with **`!! NOT COVERED: the handbook doesn't cover this question.`**. A partial answer
-starts with **`!! PARTLY COVERED`**.
+Every quote is checked automatically against the handbook text and its page.
+
+- When the handbook doesn't cover a question, the answer starts with
+  **`!! NOT COVERED: the handbook doesn't cover this question.`**
+- When it covers only part of a question, the answer starts with **`!! PARTLY COVERED`**.
 
 ## How it works
 
@@ -96,30 +86,30 @@ handbook.pdf
   -> chunk        859 chunks of 400-800 tokens along headings; image descriptions inline
   -> embed        nomic-embed-text-v1.5, locally on the CPU (vectors committed)
   -> retrieve     dense (cosine) + BM25, merged with reciprocal rank fusion
-  -> rerank       local cross-encoder (ms-marco-MiniLM-L-6-v2), keep the best 10
+  -> rerank       local cross-encoder (ms-marco-MiniLM-L-6-v2)
+  -> select       Simple: best 10 of 30  |  Dynamic: every one of 50 scoring >= -3.68 (at least 3)
+                  |  Whole handbook: no retrieval, all 254 articles (prompt-cached)
   -> answer       Claude Sonnet 5.5: only from the excerpts, exact quotes + pages,
                   says when not covered; can fetch an image (get_image tool)
   -> check        every quote looked up in the cited excerpt and on the cited page
 ```
 
-Each step is in `src/handbook_qa/` and has a notebook (below). Each design choice, with the options considered and
-the evidence, is in [DECISIONS.md](DECISIONS.md).
+## How I chose this
 
-## Results
+All the experiments are kept in the repo: each has a notebook with its outputs and an entry in
+[DECISIONS.md](DECISIONS.md) with the options, the evidence and the choice.
 
-100 questions with a reference answer and evidence, written by reading the handbook rather than by running the
-search ([evals/README.md](evals/README.md)):
+**The eval set** ([evals/README.md](evals/README.md)) has 100 questions. The reference answers and evidence were
+written by reading the handbook, never by running the search.
 
-- **40 dev questions:** used to choose methods (reranker, k, cutoffs).
-- **60 held-out questions:** written afterwards and used only in the final face-off. 10 of these are questions the
-  handbook doesn't cover. The held-out questions, and every system's settings, were committed to git before any
-  system answered them.
+- **40 dev questions** were used to choose methods, so scores on them are optimistic.
+- **60 held-out questions** were written afterwards and used only once, in the final face-off. 10 of them are
+  questions the handbook doesn't cover.
+- **Frozen first:** the held-out questions and every system's settings were committed to git before any system
+  answered them. The face-off notebook checks this from the git history.
 
-The tables below come from three notebooks: retrieval (08, dev questions), the face-off (12, held-out questions), and
-the earlier end-to-end run (11, dev questions).
-
-**Retrieval** ([notebook 08](notebooks/08_retrieval_eval.ipynb)). Chunk recall is the share of the chunks that
-answer the question that end up in the top k:
+**Retrieval** ([notebook 08](notebooks/08_retrieval_eval.ipynb), dev questions). Chunk recall is the share of the
+chunks that answer a question that make it into the top k:
 
 | method | recall@5 | recall@10 | time / question |
 |---|---|---|---|
@@ -128,10 +118,23 @@ answer the question that end up in the top k:
 | dense + BM25 fused | 0.67 | 0.78 | 0.07 s |
 | **fused + MiniLM reranker** | **0.73** | **0.85** | 2.9 s |
 
-**Final face-off on the 60 held-out questions** ([notebook 12](notebooks/12_final_faceoff.ipynb)). Real API runs,
-with Sonnet 5.5 answering and Opus 5.5 judging:
+**The reranker** ([notebook 07](notebooks/07_reranking.ipynb)). I compared three local cross-encoders.
+bge-reranker-v2-m3 took about 45 s per question on a laptop CPU, which is too slow, so I dropped it. On the dev
+questions (notebook 08), jina-reranker-v1-turbo was slower than MiniLM and had lower recall (0.80 vs 0.85 at 10),
+so I chose MiniLM.
 
-| | RAG top 10 | RAG top 15 | RAG dynamic, no cap (−3.68) | Whole handbook |
+**How many passages to keep** ([notebooks 09](notebooks/09_dynamic_selection.ipynb),
+[09b](notebooks/09b_dynamic_selection_50.ipynb) and [09c](notebooks/09c_dynamic_no_cap.ipynb)):
+
+- **09 and 09b:** a relevance-score cutoff, tuned and cross-validated, didn't beat a fixed top 10 at the same
+  number of passages. 09b's cutoff was frozen for the comparison in notebook 11.
+- **09c:** removing the 15-passage cap added a little recall, but much more context.
+- **Final face-off:** the uncapped −3.68 setting (the app's Dynamic option) ran next to top 10 and top 15.
+
+**Final face-off on the 60 held-out questions** ([notebook 12](notebooks/12_final_faceoff.ipynb)). These were real
+API runs, with Sonnet 5.5 answering and Opus 5.5 judging:
+
+| | RAG top 10 (default) | RAG top 15 | dynamic, no cap | whole handbook |
 |---|---|---|---|---|
 | chunk recall of the context | 0.80 | 0.85 | 0.81 | 1.0 |
 | citations verified correct | 100% | 100% | 99.5% | 98.4% |
@@ -143,25 +146,25 @@ with Sonnet 5.5 answering and Opus 5.5 judging:
 | cost / question | **$0.023** | $0.032 | $0.024 | $0.166 |
 | median answer time | 3.8 s | 3.8 s | 3.4 s | 7.9 s |
 
-What the results show:
-
-- **Fully right is a tie.** All four land at 75-77%, and the 95% intervals for every difference include zero.
-- **The whole handbook is reliably more complete.** It scores 0.98 against 0.87, a gap whose interval excludes zero,
-  and the gain is largest on reworded questions, which retrieval misses. But it adds more small unsupported details,
-  costs about 7 times as much and is twice as slow.
-- **More context doesn't help RAG much.** Top 15 and the uncapped cutoff find a little more evidence but give almost
-  the same answers.
-- **Recommendation:** keep RAG top 10 as the default. Improving retrieval for reworded questions is the next lever.
-- **On the 40 dev questions** ([notebook 11](notebooks/11_final_comparison.ipynb)) the earlier comparison had RAG
-  top 10 at 72.5% fully right, the frozen 3-15 dynamic cutoff at 67.5%, and the whole handbook at 65%.
+- **Fully right is a tie.** The 95% intervals for every difference include zero.
+- **The whole handbook is reliably more complete,** above all on reworded questions that retrieval misses. But it
+  adds more small unsupported details, so it ends level on fully right answers.
+- **Every option handled gaps correctly.** All four declined all 10 questions the handbook doesn't cover.
+- **Simple RAG stays the default:** it's the cheapest and fastest, and as good as any option on fully right
+  answers. The next thing to improve is retrieval for reworded questions.
+- **Earlier comparison:** [notebook 11](notebooks/11_final_comparison.ipynb) ran the same comparison on the dev
+  questions, and [notebook 10](notebooks/10_answering.ipynb) covers the answering, citation checks and judging.
 
 ## The notebooks
 
 Each pipeline stage has a notebook that runs the real package code, saved with its outputs. Open them in VS Code or
-Jupyter with the `.venv` kernel. To re-run them, install `notebooks/requirements.txt` and run
-`python -m ipykernel install --user --name paradigm-handbook`. By default they reuse saved results. `REBUILD = True`
-redoes an expensive step, and `RUN_API = True` (notebooks 03, 10 and 11) calls the Claude API. Notebook 12 only reads
-saved results; the face-off itself runs with `python -m handbook_qa.compare answer|judge <systems>`.
+Jupyter with the `.venv` kernel.
+
+- **Re-running:** install `notebooks/requirements.txt` and run
+  `python -m ipykernel install --user --name paradigm-handbook`.
+- **Saved results:** by default notebooks reuse saved results. `REBUILD = True` redoes an expensive step, and
+  `RUN_API = True` (notebooks 03, 10 and 11) calls the Claude API.
+- **The face-off itself** runs with `python -m handbook_qa.compare answer|judge <systems>`.
 
 | notebook | what it shows |
 |---|---|
@@ -172,12 +175,12 @@ saved results; the face-off itself runs with `python -m handbook_qa.compare answ
 | [05 Embeddings](notebooks/05_embeddings.ipynb) | Local nomic embeddings; only changed text is re-embedded. |
 | [06 Retrieval](notebooks/06_retrieval.ipynb) | Dense, BM25 and fusion on one question. |
 | [07 Reranking](notebooks/07_reranking.ipynb) | Three local cross-encoders compared on speed and memory. |
-| [08 Retrieval eval](notebooks/08_retrieval_eval.ipynb) | The 40-question retrieval comparison (table above). |
-| [09](notebooks/09_dynamic_selection.ipynb) / [09b](notebooks/09b_dynamic_selection_50.ipynb) Dynamic selection | Score cutoff vs fixed top k, cross-validated; the frozen cutoff. |
-| [09c Dynamic, no cap](notebooks/09c_dynamic_no_cap.ipynb) | The same cutoffs without the 15-chunk cap: slightly higher recall, far more tokens. |
+| [08 Retrieval eval](notebooks/08_retrieval_eval.ipynb) | Five retrieval methods on the 40 dev questions. |
+| [09](notebooks/09_dynamic_selection.ipynb) / [09b](notebooks/09b_dynamic_selection_50.ipynb) Dynamic selection | Score cutoff vs fixed top k, cross-validated. |
+| [09c Dynamic, no cap](notebooks/09c_dynamic_no_cap.ipynb) | The cutoffs without the 15-passage cap. |
 | [10 Answering](notebooks/10_answering.ipynb) | Answers with citations, citation checks (with a negative control), judging. |
-| [11 Comparison on dev](notebooks/11_final_comparison.ipynb) | Three systems end to end on the 40 dev questions, with cost and latency. |
-| [12 Final face-off](notebooks/12_final_faceoff.ipynb) | Four systems on the 60 held-out questions (incl. 10 not covered), with bootstrap intervals. |
+| [11 Comparison on dev](notebooks/11_final_comparison.ipynb) | Three systems end to end on the 40 dev questions. |
+| [12 Final face-off](notebooks/12_final_faceoff.ipynb) | Four systems on the 60 held-out questions, with bootstrap intervals. |
 
 ## Repository layout
 
@@ -191,12 +194,13 @@ src/handbook_qa/     the package
   retrieval.py         dense + BM25 + RRF, cross-encoder reranker, frozen dynamic selection
   answer.py            answering with citations (RAG);  full_context.py: whole-handbook baseline
   citations.py         page numbers and citation checks
-  judge.py             Opus judge;  evaluation.py: chunk recall;  compare.py: API comparison runner
+  judge.py             Opus judge;  evaluation.py: chunk recall;  compare.py: face-off runner
+  search.py            try retrieval from the command line
   ingest.py            build the data (setup / extract / chunk / embed / describe)
-  config.py, llm.py    settings (.env), Claude client (Claude API / Foundry, key from Key Vault)
+  config.py, llm.py    settings (.env) and the Claude client
 tests/               pytest suite (fake model clients; no API calls)
 notebooks/           one notebook per stage (above)
-evals/               the 40-question eval set, how it was built, the frozen dynamic cutoff
+evals/               the 100-question eval set, how it was built, the frozen dynamic settings
 artifacts/           committed outputs: image descriptions, vectors, answers and judgements
 ai_log/sessions/     what I asked the AI, what it proposed, what I accepted, what it got wrong
 DECISIONS.md         every design choice: options, evidence, what I chose, what the AI suggested
@@ -207,31 +211,31 @@ Run the tests with `pytest`. One test reads the real PDF and is skipped if it ha
 
 ## Assumptions and limitations
 
-- **The PDF is the source of truth.** It covers 254 of the 313 handbook pages on PostHog's site at the time. Answers
-  never go beyond it.
-- **Names missing from the PDF.** 216 names and team links are blank in the PDF ("handled by , , and on the team").
-  They are left blank, and the app won't fill them in.
-- **Collapsed sections.** The export kept only their titles, which affects 5 articles. Those answers aren't in the
-  PDF, so the app says they aren't covered.
-- **Garbled dollar amounts.** Two places render dollar amounts as run-together maths text (pages 21 and 593).
-- **Image descriptions** were written by Claude Code subagents (Sonnet) from the exact prompt the API pipeline uses,
-  before an API key was connected. `python -m handbook_qa.ingest describe --force` regenerates them through the API.
-- **The eval set:** the 40 dev questions were used to pick settings, so scores on them are optimistic. The headline
-  results come from the 60 held-out questions, which still give wide intervals: each question is 1.7 points. The
-  judge is a model too; its verdicts were spot-checked, not all reviewed by a person.
-- **Token counts** for chunk sizes use tiktoken's cl100k as a proxy. Claude's own count is higher; the whole
-  handbook is 673k Claude tokens.
+- **The PDF is the source of truth.** It covers 254 of the 313 handbook pages on PostHog's site at the time.
+  Answers never go beyond it.
+- **Missing names:** 216 names and team links are blank in the PDF ("handled by , , and on the team"). They are
+  left blank, and the app won't fill them in.
+- **Collapsed sections:** the export kept only their titles (5 articles). Those answers aren't in the PDF.
+- **Garbled amounts:** two places render dollar amounts as run-together maths text (pages 21 and 593).
+- **Image descriptions** were written by Claude Code subagents (Sonnet) from the exact prompt the API pipeline uses.
+  `python -m handbook_qa.ingest describe --force` regenerates them through the API.
+- **The eval set:**
+  - The dev scores are optimistic, because those questions were used to choose settings.
+  - The 60 held-out questions still give wide intervals; each question is 1.7 points.
+  - The judge is a model, and its verdicts were spot-checked rather than all reviewed by a person.
+- **Token counts** for chunk sizes use tiktoken's cl100k as a proxy. Claude's count is higher: the whole handbook
+  is 673k Claude tokens.
 - **Local models run on the CPU.** Reranking takes about 3 s per question on a laptop.
 - **Costs** are at list prices, from measured token usage.
 
 ## How AI was used
 
 The project was built with Claude Code: Opus 5.5 as the main collaborator, with Sonnet and Opus subagents for
-parallel work. Subagents wrote the image descriptions and the eval drafts, and ran experiments in separate git
-worktrees.
+parallel work. Subagents wrote the image descriptions and the eval questions, and ran experiments in separate git
+worktrees. Development runs used subagent stand-ins; the paid API was used only for the comparison runs.
 
 - I set the direction and made the design calls. The AI proposed implementations and alternatives.
 - Each session's prompts, accepted and rejected suggestions, and the AI's mistakes, with how they were caught, are
-  logged in [ai_log/sessions/](ai_log/sessions/).
-- Each design decision is in [DECISIONS.md](DECISIONS.md).
+  in [ai_log/sessions/](ai_log/sessions/).
+- Every decision is in [DECISIONS.md](DECISIONS.md).
 - Commits where the AI wrote or changed code carry the trailer `AI-assisted: yes`.
