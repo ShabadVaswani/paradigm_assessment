@@ -3,8 +3,8 @@
 - **What it does:** answers questions about the PostHog company handbook (a 1,076-page PDF) using only the handbook.
   Every claim comes with a word-for-word quote and its page number, and the app says plainly when the handbook
   doesn't cover a question.
-- **How to run:** `pip install -e .`, then `python -m handbook_qa.ingest setup` once, set `ANTHROPIC_API_KEY`, and run
-  `python -m handbook_qa`. Details are in [Setup](#setup).
+- **How to run:** `pip install -e .`, then `python -m handbook_qa.ingest setup` once, then `python -m handbook_qa`.
+  It uses `ANTHROPIC_API_KEY`, or asks for a key if that isn't set. Details are in [Setup](#setup).
 - **Default and opt-in:** **Simple RAG** (the 10 most relevant passages) is the default. **Dynamic RAG** (every
   passage above a relevance cutoff) and **Whole handbook** (the entire handbook in context) are opt-in from the menu.
 - **Finding:** on 60 held-out questions all three were fully right about 75% of the time. The whole handbook was
@@ -31,13 +31,23 @@ python -m handbook_qa.ingest setup        # one-off, a few minutes; makes no API
   and loads the committed image descriptions and embeddings. Nothing is described or embedded again.
 - **First run:** it also downloads the two local models (nomic-embed-text-v1.5, ~0.5 GB, and a MiniLM reranker,
   ~0.1 GB).
-- **API key:** put `ANTHROPIC_API_KEY` in your environment, or in a `.env` file (gitignored; see `.env.example`).
-  Without a key, the app starts in retrieval-only mode and shows which passages each option would use.
-
 ```bash
 python -m handbook_qa                     # or: handbook-qa
-python -m handbook_qa --retrieval-only    # no API calls
 ```
+
+The app needs an Anthropic API key ([create one here](https://console.anthropic.com/settings/keys)).
+
+- **To set it permanently,** add `ANTHROPIC_API_KEY` to your environment:
+  - Windows: `setx ANTHROPIC_API_KEY "<your key>"`, then open a new terminal.
+  - macOS/Linux: add `export ANTHROPIC_API_KEY=<your key>` to `~/.bashrc` or `~/.zshrc`.
+  - Or put it in a `.env` file in the project folder (gitignored; see `.env.example`).
+- **If no key is set,** the app explains these steps and asks you to paste one:
+  - Your typing is hidden.
+  - The key is used for that session only, and is never printed or saved.
+  - Press Enter to quit instead.
+- **Every key is checked at startup** with a free call that lists the available models.
+  - A rejected key gets a clear message, and the app asks again, up to three times.
+  - If the API can't be reached, the app says so and exits.
 
 ## Using the app
 
