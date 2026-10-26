@@ -303,3 +303,58 @@ My answers to the AI's questions:
 
 - **The cost of later whole-handbook questions.** The app's text first said follow-up questions cost about 18 cents. That's the average including the first, expensive question. The AI caught it by measuring per-question costs from the saved usage: $1.83 for the first, $0.14 on average for the other 39. It corrected the text and the test.
 - **A crash at the menu.** The first version would have crashed if input ended (Ctrl+D / Ctrl+C) at the menu prompt. The AI fixed it before the tests ran.
+
+## Continued (2026-10-26): held-out questions and the final face-off
+
+### Key prompts
+
+> Right, next 60 questions. By reading the handbook, answer key by reading not by search. Include ten questions. That handbook doesn't cover. Then run final face-off. Through the API. the top 10, then full handbook and 3.68, no cap, dynamic.
+>
+> new key is in ANTHROPIC_API_KEY environment variable, clear old one from env
+
+> also do rag top 15
+
+### What the AI did / proposed
+
+- **The key.** The new key was in my Windows user environment, which this session couldn't see because it started earlier. The AI checked that detached processes pick it up, comparing only the last 4 characters, and blanked the old key in `.env`.
+- **Writing the questions.** Four Opus subagents each wrote 15, by reading the handbook text and grepping it, never the app's code or outputs. The validator was extended for not-covered questions (search terms with hit counts, plus a near-miss note) and for duplicate ids or questions.
+- **Review.** The AI read all 60, mapped every quote to its chunks, re-checked the 10 absences with its own synonym searches, and relabelled B-17. It rebuilt the eval file with a dev/holdout split and confirmed the first 40 were unchanged apart from the new field.
+- **Freezing.** The AI committed, in order:
+  1. the no-cap config, before the held-out questions. It had already checked that the main pipeline reproduces notebook 09c with this config;
+  2. the held-out questions, before any answers;
+  3. the top-15 runner change, before any top-15 answers.
+- **The runs.** Answering and judging ran through the API as detached, resumable processes with log monitors. Every system ended with 100 answers and 100 judgements, and there were no errors.
+- **Notebook 12** reports:
+  - the held-out headline, split into answerable and not-covered questions;
+  - results by question type;
+  - paired bootstrap intervals;
+  - dev and all-100 results for reference;
+  - cost.
+
+  It also checks the freeze order from git and ends with a written conclusion.
+- **Other updates.**
+  - Notebook 11 is now restricted to the 40 dev questions, because the result files now also hold the held-out answers; its table is unchanged.
+  - The app's "Explain these options" text and the README now quote the held-out results.
+
+### Result
+
+- On the held-out 60, the share of fully right answers is a tie: 75-77% for every system.
+- The whole handbook is more complete (0.98 against 0.87, with an interval excluding zero) but less grounded, about 7 times the cost and twice as slow.
+- Every system declined all 10 not-covered questions.
+- Top 15 and no-cap gave about the same answers as top 10.
+- Details are in decision 22.
+
+### Accepted / rejected
+
+- I defined the 60 questions, the 10 not-covered ones, the systems, running through the API, and the key handling. I added top 15 during the run.
+- The AI's choices, which I haven't commented on yet:
+  - the dev/holdout split;
+  - freezing configs and questions in git before the runs;
+  - reusing the earlier dev answers for top 10 and the whole handbook;
+  - the bootstrap intervals.
+
+### What the AI got wrong, and how it was caught
+
+- **A misleading log alert.** The log watcher's error filter included "429" (the rate-limit code), so it fired on a normal line where an output token count happened to be 429. The AI recognised it as harmless.
+- **Notebook 11 would have drifted.** Its result files grew from 40 to 100 rows during the face-off. The AI noticed because the files are shared with the face-off, added the dev filter, re-ran it and confirmed the table was unchanged.
+- **One agent question was mislabelled.** It was called multi-section though its sections sit in one chunk (B-17). The AI caught it in review, when counting expected chunks per question type.
