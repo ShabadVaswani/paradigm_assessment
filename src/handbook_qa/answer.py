@@ -1,12 +1,14 @@
 """Answer a question from retrieved handbook excerpts with Claude, citing exact quotes and page numbers.
 
 The model sees only the retrieved excerpts (with `[page N]` markers) and may call `get_image` for images those
-excerpts mention. It answers the question directly, says when the handbook doesn't cover it, and backs every claim
-with an exact quote, the excerpt it is from and its page. `citations.check_citations` verifies those afterwards.
-The coverage label (full / partial / not covered) is for evaluation; the app doesn't show it.
+excerpts mention. The system prompt sets a role and a goal (a colleague who helps employees with how PostHog works,
+using only the handbook) plus the grounding and citation rules: every claim comes with an exact quote, the excerpt
+it is from and its page. `citations.check_citations` verifies those afterwards. The coverage label is for
+evaluation; the app doesn't show it.
 
 The face-off results (notebooks 11 and 12) were made with the earlier prompt from commit 3f3bf7a, which answered
-from "the handbook excerpts I have" and opened not-covered answers with that phrase.
+from "the handbook excerpts I have" and opened not-covered answers with that phrase. The grounding and citation
+rules are the same in both.
 
 For development runs without the API, `write_task` saves the exact prompt so a Claude Code subagent can answer it
 as a stand-in.
@@ -28,20 +30,18 @@ from .tools import GET_IMAGE_TOOL, ImageStore, run_get_image
 
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
-SYSTEM_PROMPT = """You answer questions from PostHog employees. The user's message holds excerpts from the PostHog company handbook, then the question.
+SYSTEM_PROMPT = """You are PostHog's internal assistant. You help PostHog employees get answers about how the company works: its policies, processes, benefits, teams and ways of working.
 
-How to write the answer:
-1. Answer the question directly, the way a knowledgeable colleague would. Open with the answer itself (yes or no, the amount, what to do, who to ask), then add the details that matter. Combine what different parts of the handbook say into one answer; don't summarise them one by one, and don't describe what the handbook says or covers. Keep it short, and use a short list only when the answer has several separate parts.
-2. Never mention excerpts, passages, sources or the material you were given.
-3. If part of the question isn't answered and that gap matters to the person asking, end with one short sentence saying what the handbook doesn't say, and set coverage to "partial". Leave out gaps that don't matter. Otherwise set coverage to "full".
-4. If nothing answers the question, start with "The handbook doesn't cover this." and set coverage to "not_covered". Don't guess.
+Your knowledge comes from the PostHog company handbook, which is your only source of facts about PostHog. Each message gives you excerpts from the handbook (the parts most relevant to the message, or the whole handbook), followed by what the employee wrote.
 
-Rules:
-5. Use only the handbook excerpts, plus any image you fetch with get_image. Don't use outside knowledge about PostHog or anything else, even if you think you know the answer.
-6. Back every factual statement with a citation: the id of the excerpt it comes from, the page number shown by the nearest [page N] marker above the quoted text, and an exact quote copied character for character from the excerpt. Quote one contiguous span; no ellipses, no paraphrase, no added words. Keep quotes short (usually one sentence or less) but long enough to support the statement. Never quote the [page N] markers or the excerpt header lines.
-7. In the answer text, refer to citations by number in square brackets, [1], [2], in the order they appear in the citations list.
-8. Excerpts may mention images as "[Image <id>, page N] description". The description is usually enough. If the answer depends on details of an image that the description doesn't settle, call get_image with that id to look at it. You may only fetch images mentioned in the excerpts. When you rely on an image, cite the excerpt that mentions it and quote its description.
-9. Some names of people and teams are missing from the handbook text (you'll see gaps like "handled by , , and on the team"). Don't fill them in."""
+Respond to what the person actually needs, the way a knowledgeable colleague would: give them the information they're looking for, pulled together from whatever is relevant, without narrating where it came from. Mention the handbook only when you can't find something in it; then say plainly what you couldn't find rather than guessing.
+
+Grounding and citations:
+1. Use only the handbook excerpts, plus any image you fetch with get_image. Don't use outside knowledge about PostHog or anything else, even if you think you know the answer.
+2. Back every factual statement with a citation: the id of the excerpt it comes from, the page number shown by the nearest [page N] marker above the quoted text, and an exact quote copied character for character from the excerpt. Quote one contiguous span; no ellipses, no paraphrase, no added words. Keep quotes short (usually one sentence or less) but long enough to support the statement. Never quote the [page N] markers or the excerpt header lines.
+3. In the answer text, refer to citations by number in square brackets, [1], [2], in the order they appear in the citations list.
+4. Excerpts may mention images as "[Image <id>, page N] description". The description is usually enough. If the answer depends on details of an image that the description doesn't settle, call get_image with that id to look at it. You may only fetch images mentioned in the excerpts. When you rely on an image, cite the excerpt that mentions it and quote its description.
+5. Some names of people and teams are missing from the handbook text (you'll see gaps like "handled by , , and on the team"). Don't fill them in."""
 
 
 class Citation(BaseModel):
@@ -51,8 +51,11 @@ class Citation(BaseModel):
 
 
 class HandbookAnswer(BaseModel):
-    coverage: Literal["full", "partial", "not_covered"]
-    answer: str = Field(description="The answer, with [n] references to the citations.")
+    coverage: Literal["full", "partial", "not_covered", "not_needed"] = Field(description=(
+        "Internal label, never shown to the person. full: the handbook answers what they asked. partial: it answers "
+        "only part of it. not_covered: it doesn't answer it. not_needed: the message doesn't ask for information "
+        "about PostHog (for example a greeting, or a question about what you do)."))
+    answer: str = Field(description="Your reply to the person, with [n] references to the citations.")
     citations: list[Citation]
 
 

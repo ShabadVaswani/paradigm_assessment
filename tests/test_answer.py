@@ -90,12 +90,23 @@ def test_answer_loop_fetches_permitted_images_and_checks_citations(monkeypatch):
     assert [r["is_error"] for r in tool_results] == [False, True]  # an image not in the excerpts is refused
 
 
-def test_prompt_asks_for_a_direct_answer_and_a_fixed_not_covered_opening():
+def test_prompt_is_role_and_goal_with_the_face_off_grounding_rules_unchanged():
     from handbook_qa.answer import SYSTEM_PROMPT
-    assert "Answer the question directly" in SYSTEM_PROMPT
-    assert 'start with "The handbook doesn\'t cover this."' in SYSTEM_PROMPT
-    assert "Never mention excerpts, passages" in SYSTEM_PROMPT
-    assert "excerpts I have" not in SYSTEM_PROMPT
+    assert SYSTEM_PROMPT.startswith("You are PostHog's internal assistant.")
+    assert "only source of facts" in SYSTEM_PROMPT
+    assert "Mention the handbook only when you can't find something" in SYSTEM_PROMPT
+    # The grounding and citation rules, word for word as in the prompt the face-off used (commit 3f3bf7a).
+    for rule in ("Use only the handbook excerpts", "Don't use outside knowledge about PostHog or anything else, even if you think you know the answer.",
+                 "Back every factual statement with a citation: the id of the excerpt it comes from, the page number shown by the nearest [page N] marker above the quoted text, and an exact quote copied character for character from the excerpt. Quote one contiguous span; no ellipses, no paraphrase, no added words.",
+                 "refer to citations by number in square brackets, [1], [2], in the order they appear in the citations list.",
+                 "You may only fetch images mentioned in the excerpts.", "Don't fill them in."):
+        assert rule in SYSTEM_PROMPT
+
+
+def test_greetings_have_their_own_coverage_label():
+    answer = HandbookAnswer(coverage="not_needed", answer="Hi! Ask me anything about how PostHog works.", citations=[])
+    assert answer.coverage == "not_needed"
+    assert "not_needed" in HandbookAnswer.model_json_schema()["properties"]["coverage"]["description"]
 
 
 def test_user_message_lists_excerpts_with_ids_and_pages():

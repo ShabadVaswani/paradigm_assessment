@@ -271,7 +271,7 @@ def render_reply(reply: Reply) -> str:
                 status = "warning: this quote could not be found in the handbook text"
             lines.append(_wrap(f'[{n}] "{citation.quote}"', "  "))
             lines.append(f"      - {where}  ({status})")
-    elif answer.coverage != "not_covered":
+    elif answer.coverage in ("full", "partial"):          # a factual answer should have quotes
         lines.append("(No quotes were given for this answer.)")
     images = getattr(reply.result, "images_viewed", [])
     timing = (f"{reply.retrieval_seconds:.1f}s to find passages, " if reply.mode != "whole" else "")

@@ -62,6 +62,15 @@ def test_the_coverage_label_stays_internal():
         assert "covered" not in text.lower() and "partial" not in text.lower()       # no banner or label
 
 
+def test_a_greeting_is_shown_without_a_missing_quotes_note():
+    reply = make_reply("not_needed")
+    reply.result.answer.citations, reply.result.checks = [], []
+    assert "No quotes" not in render_reply(reply)
+    reply = make_reply("full")
+    reply.result.answer.citations, reply.result.checks = [], []
+    assert "No quotes were given" in render_reply(reply)               # a factual answer without quotes is flagged
+
+
 def test_unverifiable_quotes_are_flagged():
     assert "found, but on page 955" in render_reply(make_reply(ok=False, in_excerpt=True))
     assert "could not be found" in render_reply(make_reply(ok=False, in_excerpt=False))

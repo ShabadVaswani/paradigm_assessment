@@ -83,10 +83,12 @@ Quotes from the handbook:
 
 Every quote is checked automatically against the handbook text and its page.
 
-- **Answers come first:** the answer opens with the answer itself, combined from every relevant part of the
-  handbook.
-- **Gaps:** if part of the question isn't covered and it matters, one short sentence at the end says so.
-- **Nothing covered:** the answer starts with "The handbook doesn't cover this."
+- **A colleague, not a search engine:** the assistant gives you the information you're after, pulled together
+  from wherever it is in the handbook.
+- **Small talk:** it can handle "hi" and "what do you do?".
+- **When something isn't there:** it only mentions the handbook when it can't find something, and then says so
+  plainly instead of guessing.
+- **Source of facts:** the handbook is its only source, and every factual statement carries a checked quote.
 
 ## How it works
 
@@ -234,9 +236,9 @@ Run the tests with `pytest`. One test reads the real PDF and is skipped if it ha
   - The dev scores are optimistic, because those questions were used to choose settings.
   - The 60 held-out questions still give wide intervals; each question is 1.7 points.
   - The judge is a model, and its verdicts were spot-checked rather than all reviewed by a person.
-  - The results come from an earlier answering prompt. The current one asks for a direct answer first and never
-    mentions excerpts. It has the same rules on grounding, citations and not-covered questions, but it hasn't
-    been re-run on the eval set.
+  - The results come from an earlier answering prompt. The current one is built around the assistant's role
+    (a colleague helping employees with how PostHog works) instead of rules about phrasing. It keeps the same
+    grounding and citation rules, but it hasn't been re-run on the eval set.
 - **Token counts** for chunk sizes use tiktoken's cl100k as a proxy. Claude's count is higher: the whole handbook
   is 673k Claude tokens.
 - **Local models run on the CPU.** Reranking takes about 3 s per question on a laptop.
