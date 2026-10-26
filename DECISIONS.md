@@ -165,3 +165,45 @@ One entry per design choice: the options considered, the evidence, what I chose,
   Fusion beats either list alone at k = 10. MiniLM adds about 6 points at both k, for about 2.8 s per question. jina adds little. This supports keeping MiniLM as the default reranker (decision 13). Two findings from the breakdown by question type:
   - On reworded questions, dense only scores 0.39 against BM25's 0.61, the opposite of what we expected.
   - Multi-article questions are the weakest for every method (0.51-0.62 at k = 5).
+
+## 15. Answering: Sonnet 5.5 on the top 10 reranked excerpts, verified citations, Opus 5.5 as judge (2026-10-25)
+
+- **Chosen (my spec):**
+  - Claude answers from the top 10 excerpts, using only the retrieved chunks, and may call `get_image`.
+  - It must say plainly when the handbook doesn't cover something.
+  - It quotes exact text with page numbers, and every citation is checked.
+  - Sonnet 5.5 answers and Opus 5.5 judges.
+  - All of it is shown in a notebook (`notebooks/10_answering.ipynb`).
+- **AI suggested, and I didn't object:**
+  - **Output format:** a structured answer with `coverage` (full / partial / not_covered), the answer text with [n] references, and a list of citations, each with `source_id`, `page` and an exact `quote`.
+  - **Page markers:** excerpts carry `[page N]` markers, computed from the extracted PDF elements, because chunks only record their page range.
+  - **Image tool:** `get_image` only serves images mentioned in the retrieved excerpts.
+  - **Citation check:** each quote must be in the excerpt it cites and on the cited page, ignoring only whitespace and curly-vs-straight quotes. A negative control runs on the real answers: changing one word, shifting the page by one, or naming the wrong excerpt gets flagged 195/196, 196/196 and 196/196 (the one miss is a 2-word quote that couldn't be altered).
+  - **Judge:** scores correctness, completeness, groundedness, coverage honesty, and whether the excerpts contained the evidence at all. That last one separates retrieval misses from answering mistakes.
+  - **Stand-ins:** with no API key yet, Claude Code subagents on the same model families (Sonnet answering, Opus judging) produced the answers and judgements from the exact API prompts. They are saved in `artifacts/answers/` and labelled as stand-ins. `RUN_API = True` in the notebook replaces them with real API runs.
+- **Result** (40 questions):
+  - **Citations:** all 196 checked out.
+  - **Correctness:** 39 correct, 1 partially correct.
+  - **Completeness:** 30 complete, 7 partial, 3 missing.
+  - **Groundedness:** 38 grounded, 2 with a minor unsupported detail.
+  - **Coverage labels:** 39 appropriate, 1 overclaimed (C1-09 said "full" while its text admitted a gap).
+  - **Where the incomplete answers come from:** of the 10 not rated complete, 7 trace to retrieval (the evidence was only partly or not at all in the top 10) and 3 to answering (B-05, C1-02 and C2-06 left out points that were in the excerpts).
+  - **Images:** the answering model never called `get_image`; the descriptions were always enough.
+
+## 16. Don't adopt dynamic selection after reranking; keep fixed top 10 (2026-10-25)
+
+- **Options:** fixed top 5 or 10 after reranking, or keep candidates whose reranker score clears a cutoff, with at least 3 and at most 15 kept. A relative variant (within X of the top score) was also tried.
+- **Evidence:** a subagent ran the experiment in its own git worktree. The main code was left untouched, and the notebook is on branch `worktree-agent-a5fcabd5366536ab4` as `notebooks/09_dynamic_selection.ipynb`. The cutoff was tuned on the 40 questions as I asked.
+
+  | rule | chunk recall | all chunks | mean items | mean tokens |
+  |---|---|---|---|---|
+  | top 5 | 0.733 | 0.58 | 5.0 | 2,608 |
+  | top 10 | 0.846 | 0.75 | 10.0 | 5,309 |
+  | dynamic, tuned in-sample (cutoff -3.68) | 0.850 | 0.73 | 9.1 | 4,788 |
+  | dynamic, 5-fold cross-validated | 0.832 | 0.71 | 9.4 | 4,923 |
+
+  - The tuned cutoff matches top 10 in-sample with about 10% fewer tokens. Cross-validated, it falls below top 10, and it is no better than simply keeping a fixed 8 or 9.
+  - The floor of 3 causes all of its losses.
+  - The cutoff is fragile: moving it ±0.25 changes recall from 0.812 to 0.858.
+- **Chosen:** none yet; it's my call. The pipeline stays on fixed top 10, and the experiment stays on its branch, not merged.
+- **AI suggested:** don't adopt, as the subagent recommended. Revisit with a held-out question set or a reranker whose scores are calibrated.
