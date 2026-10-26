@@ -103,3 +103,34 @@ One entry per design choice: the options considered, the evidence, what I chose,
   - BM25 written in ~30 lines rather than adding a library: Okapi k1 = 1.5, b = 0.75.
   - A plain tokenizer: lowercase words, a short stopword list, and a light plural strip ("refunds" → "refund"). There's no stemmer yet.
   - Images are searched as their own items alongside chunks. Results say which kind each hit is.
+
+## 12. A notebook for every pipeline stage, running the real code (2026-10-25)
+
+- **Options:** keep exploration only in notebook 01; write notebooks that re-implement each stage; or write notebooks that call the package code and show its output.
+- **Evidence:** the pipeline code already lives in `src/handbook_qa/`. A notebook that copied it would drift from what the app runs.
+- **Chosen:** one notebook per stage from now on, and notebooks for the stages already built (my request): `02_pdf_extraction`, `03_images`, `04_chunking`, `05_embeddings`, `06_retrieval`, `07_reranking`. Each runs end to end, reuses saved results where possible, and is committed with its outputs.
+- **AI suggested:**
+  - Notebooks call the package rather than copy it, so they show what the app actually does.
+  - Each notebook has switches (`REBUILD`, `RUN_API`) for redoing expensive steps; by default it reuses `articles.json`, the rendered images, the description cache and the vectors.
+  - Image previews are small JPEGs, so the images notebook is 172 KB instead of 2 MB.
+  - A shared `notebooks/spot_check_questions.json` for the retrieval and reranking notebooks, clearly labelled as a sanity check rather than an eval.
+- **What it caught:** the invariant checks in `04_chunking` found 4 chunks ending on a heading (an H2 directly followed by an H3 was cut between them). That bug is now fixed, with a test; the 8 affected chunks were re-embedded and the other 928 reused. They also showed that two figures in decision 06 came from an earlier run; those are corrected.
+
+## 13. Cross-encoder reranker after fusion, switchable; ms-marco-MiniLM-L-6-v2 by default for now (2026-10-25)
+
+- **Options:** no reranker; one of the local cross-encoders fastembed runs on ONNX: `Xenova/ms-marco-MiniLM-L-6-v2` (0.08 GB, reads 512 tokens), `jinaai/jina-reranker-v1-turbo-en` (0.15 GB, 8K), `BAAI/bge-reranker-v2-m3-int8` (0.57 GB, 8K).
+- **Evidence:** `notebooks/07_reranking.ipynb`, 11 spot-check questions with known answers (a sanity check, too small to separate the models reliably). Each reranker rescored the top 30 fused results and kept 5. Every setup found all 11 answers in its top 5:
+
+  | setup | answer at rank 1 | mean rank | s / question (2 runs) | memory |
+  |---|---|---|---|---|
+  | fused, no rerank | 9 | 1.27 | – | – |
+  | MiniLM-L-6 | 9 | 1.18 | 2.9–3.2 | 1.3 GB |
+  | jina turbo | 8 | 1.45 | 3.8–4.4 | 1.5 GB |
+  | bge-m3 int8 | 10 | 1.09 | 43–48 | 3.2 GB |
+
+- **Chosen:** a cross-encoder after the merged list that keeps the best few, switchable on/off (my spec). It reranks the top 30 fused results and keeps 5. Switch it with `RERANK=on|off`, `--no-rerank` on the search command, or `search(..., rerank=False)`; with it off, the fused top 8 are returned.
+- **AI suggested:**
+  - MiniLM-L-6 as the default for now: fast, and no worse than the others here.
+  - jina turbo was its first pick because it reads whole chunks, but it ranked lowest and once pushed an image answer down to rank 4.
+  - bge-m3 ranked best but at 43–48 s per question is too slow on this laptop's CPU for interactive use. It stays one setting away (`RERANK_MODEL`) for when the evals or a GPU justify it.
+  - Revisit the choice when there is a real eval set.
