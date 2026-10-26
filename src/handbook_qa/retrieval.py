@@ -1,4 +1,5 @@
-"""Hybrid retrieval over chunks and images: exact cosine similarity and BM25, merged with reciprocal rank fusion.
+"""Hybrid retrieval over chunks and images: exact cosine similarity and BM25, merged with reciprocal rank fusion,
+then (optionally) reranked with a cross-encoder.
 
 There are under a thousand items, so both searches are exact and run in memory; no vector database.
 
@@ -8,6 +9,9 @@ There are under a thousand items, so both searches are exact and run in memory; 
   product names and numbers.
 - Fusion: reciprocal rank fusion (score = sum of 1 / (k + rank) over the two lists). It uses ranks only, so the
   two very different score scales never have to be compared.
+- Rerank (switchable): a cross-encoder reads the question and each fused candidate together and scores how well
+  the candidate answers it. Slower than the first stage, so it only sees the top fused candidates; the best few
+  are kept.
 """
 from __future__ import annotations
 
@@ -83,6 +87,22 @@ class Hit:
     dense_score: float | None = None
     bm25_rank: int | None = None
     bm25_score: float | None = None
+    fused_rank: int | None = None
+    rerank_score: float | None = None  # cross-encoder score; None when reranking is off
+
+
+class Reranker:
+    """Local cross-encoder (ONNX via fastembed, CPU)."""
+
+    def __init__(self, model_name: str, cache_dir: Path, threads: int, batch_size: int = 8) -> None:
+        from fastembed.rerank.cross_encoder import TextCrossEncoder  # heavy import; only when reranking
+
+        self.model_name, self.batch_size = model_name, batch_size
+        self.model = TextCrossEncoder(model_name, cache_dir=str(cache_dir), threads=threads,
+                                      providers=["CPUExecutionProvider"])
+
+    def score(self, query: str, texts: list[str]) -> np.ndarray:
+        return np.array(list(self.model.rerank(query, texts, batch_size=self.batch_size)), dtype=np.float32)
 
 
 def load_corpus(chunks_path: Path, images_path: Path) -> list[Item]:
@@ -117,6 +137,10 @@ class Retriever:
     embed_query: callable              # str -> normalised vector
     candidates: int = 50
     rrf_k: int = 60
+    reranker: Reranker | None = None   # None = reranking unavailable
+    rerank: bool = False               # default for search(); can be overridden per call
+    rerank_candidates: int = 30
+    rerank_top_n: int = 5
     bm25: BM25 = field(init=False)
 
     def __post_init__(self) -> None:
@@ -125,7 +149,7 @@ class Retriever:
         self.bm25 = BM25([tokenize(item.text) for item in self.items])
 
     @classmethod
-    def from_settings(cls, settings: Settings, embed_query=None) -> "Retriever":
+    def from_settings(cls, settings: Settings, embed_query=None, reranker: Reranker | None = None) -> "Retriever":
         items = load_corpus(settings.paths.chunks, settings.paths.image_index)
         store = VectorStore.load(settings.paths.vectors)
         missing = [item.id for item in items if item.id not in store.lookup()]
@@ -135,10 +159,22 @@ class Retriever:
         if embed_query is None:
             from .embeddings import Embedder
             embed_query = Embedder(settings.embed).embed_query
-        return cls(items, store.matrix_for([item.id for item in items]), embed_query,
-                   settings.retrieval.candidates, settings.retrieval.rrf_k)
+        r = settings.retrieval
+        if reranker is None and r.rerank:
+            reranker = Reranker(r.rerank_model, settings.embed.model_cache, settings.embed.threads)
+        return cls(items, store.matrix_for([item.id for item in items]), embed_query, r.candidates, r.rrf_k,
+                   reranker, r.rerank, r.rerank_candidates, r.rerank_top_n)
 
-    def search(self, query: str, k: int = 8) -> list[Hit]:
+    def search(self, query: str, k: int | None = None, rerank: bool | None = None) -> list[Hit]:
+        """Top results for `query`.
+
+        With reranking on, the top `rerank_candidates` fused results are rescored by the cross-encoder and the best
+        `k` (default `rerank_top_n`) are returned. With it off, the top `k` (default 8) fused results are returned.
+        """
+        rerank = self.rerank if rerank is None else rerank
+        if rerank and self.reranker is None:
+            raise RuntimeError("Reranking requested but no reranker is loaded (RERANK=off at startup?)")
+
         dense_scores = self.vectors @ self.embed_query(query)
         bm25_scores = self.bm25.scores(tokenize(query))
         # Cosine scores can be negative; shift so rank_order keeps every candidate.
@@ -147,6 +183,15 @@ class Retriever:
         fused = reciprocal_rank_fusion([dense, lexical], self.rrf_k)
         dense_rank = {index: rank for rank, index in enumerate(dense, start=1)}
         bm25_rank = {index: rank for rank, index in enumerate(lexical, start=1)}
-        best = sorted(fused, key=lambda index: -fused[index])[:k]
-        return [Hit(self.items[i], fused[i], dense_rank.get(i), float(dense_scores[i]),
-                    bm25_rank.get(i), float(bm25_scores[i]) if i in bm25_rank else None) for i in best]
+
+        keep = self.rerank_candidates if rerank else (k or 8)
+        ordered = sorted(fused, key=lambda index: -fused[index])[:keep]
+        hits = [Hit(self.items[i], fused[i], dense_rank.get(i), float(dense_scores[i]),
+                    bm25_rank.get(i), float(bm25_scores[i]) if i in bm25_rank else None, fused_rank=n)
+                for n, i in enumerate(ordered, start=1)]
+        if not rerank:
+            return hits
+        scores = self.reranker.score(query, [hit.item.text for hit in hits])
+        for hit, score in zip(hits, scores):
+            hit.rerank_score = float(score)
+        return sorted(hits, key=lambda hit: -hit.rerank_score)[:k or self.rerank_top_n]

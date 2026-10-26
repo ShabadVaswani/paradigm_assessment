@@ -46,6 +46,34 @@ def test_hybrid_search_combines_dense_and_keyword_matches():
     assert c0.bm25_rank == 1
 
 
+class KeywordReranker:
+    """Scores a text by how many times it contains the word 'answer'."""
+
+    def score(self, query, texts):
+        return np.array([t.count("answer") for t in texts], dtype=np.float32)
+
+
+def reranking_retriever():
+    texts = [f"doc {i} filler" for i in range(6)] + ["the answer answer answer", "an answer"]
+    vectors = np.eye(8, dtype=np.float32)[:, :8]
+    query = np.linspace(1.0, 0.1, 8)  # dense order: doc 0 first, the "answer" docs last
+    return Retriever([Item(f"c{i}", "chunk", t, {}) for i, t in enumerate(texts)], vectors, lambda q: query,
+                     candidates=10, rrf_k=60, reranker=KeywordReranker(), rerank=True,
+                     rerank_candidates=8, rerank_top_n=2)
+
+
+def test_reranker_reorders_fused_candidates_and_keeps_top_n():
+    hits = reranking_retriever().search("question")
+    assert [h.item.id for h in hits] == ["c6", "c7"]
+    assert hits[0].rerank_score == 3 and hits[0].fused_rank > 2  # promoted from low in the fused list
+
+
+def test_reranking_can_be_switched_off_per_call():
+    hits = reranking_retriever().search("question", k=3, rerank=False)
+    assert [h.item.id for h in hits] == ["c0", "c1", "c2"]
+    assert all(h.rerank_score is None for h in hits)
+
+
 class FakeEmbedder:
     calls = 0
 

@@ -43,6 +43,11 @@ class RetrievalSettings:
     top_k: int = int(_env("RETRIEVAL_TOP_K", "8"))
     candidates: int = int(_env("RETRIEVAL_CANDIDATES", "50"))  # from each of dense and BM25 before fusing
     rrf_k: int = int(_env("RETRIEVAL_RRF_K", "60"))
+    # Cross-encoder reranking of the fused list: score the top `rerank_candidates`, keep the best `rerank_top_n`.
+    rerank: bool = _env("RERANK", "on").lower() in ("on", "1", "true", "yes")
+    rerank_model: str = _env("RERANK_MODEL", "jinaai/jina-reranker-v1-turbo-en")
+    rerank_candidates: int = int(_env("RERANK_CANDIDATES", "30"))
+    rerank_top_n: int = int(_env("RERANK_TOP_N", "5"))
 
 
 @dataclass(frozen=True)
