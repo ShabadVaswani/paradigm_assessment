@@ -65,9 +65,12 @@ cover something. They differ in how much of the handbook the AI gets to read.
    $1.80 for the first question while the handbook loads, then about 14 cents a question
    while it stays loaded (5 minutes after the last question).
 
-In our test of 40 questions, the share of answers rated fully right was:
-Simple RAG 72%, Dynamic RAG 68%, Whole handbook 65%. The whole-handbook option found
-more of the answer to hard questions, but added small unsupported details more often.
+How they compared, on 60 test questions none of them had seen before:
+Simple RAG and Whole handbook each got 75% of answers fully right. Whole handbook gave
+more complete answers, especially to oddly worded questions, but added small unsupported
+details more often and cost about 7 times as much. Both said "not covered" correctly for
+all 10 questions the handbook doesn't answer. (Dynamic RAG, as set up here, was only
+tested on an earlier 40 questions, where it scored 68% against Simple RAG's 72%.)
 """
 
 HELP_IN_MODE = "Type a question, 'menu' to go back, or 'quit' to exit."

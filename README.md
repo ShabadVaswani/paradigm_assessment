@@ -6,14 +6,15 @@ the question.
 
 The terminal app offers three ways to answer, so you can compare them:
 
-| option | what the AI reads | 40-question eval: fully right | cost / question |
+| option | what the AI reads | fully right on 60 held-out questions | cost / question |
 |---|---|---|---|
-| **1. Simple RAG** (default) | the 10 most relevant passages | **72.5%** | ~$0.02 |
-| **2. Dynamic RAG** | every passage above a relevance cutoff (3-15) | 67.5% | ~$0.02 |
-| **3. Whole handbook** | the entire handbook (~673k tokens, cached) | 65% | ~$0.14 (first ~$1.80) |
+| **1. Simple RAG** (default) | the 10 most relevant passages | **75%** | ~$0.02 |
+| **2. Dynamic RAG** | every passage above a relevance cutoff (3-15) | not in the face-off (67.5% on the 40 dev questions) | ~$0.02 |
+| **3. Whole handbook** | the entire handbook (~673k tokens, cached) | 75% (more complete, less grounded) | ~$0.14 (first ~$1.80) |
 
 "Fully right" means the judge (Claude Opus 5.5) rated the answer correct, complete, grounded in the quotes, and
-honest about what isn't covered. All three use Claude Sonnet 5.5 to answer. See [Results](#results).
+honest about what isn't covered. All three use Claude Sonnet 5.5 to answer. Every system correctly declined all 10
+held-out questions the handbook doesn't cover. See [Results](#results).
 
 ---
 
@@ -106,9 +107,16 @@ the evidence, is in [DECISIONS.md](DECISIONS.md).
 
 ## Results
 
-40 questions with a reference answer and evidence, written by reading the handbook rather than by running the
-search ([evals/README.md](evals/README.md)). The mix is 11 straightforward, 9 reworded, 8 that need 2-3 sections of
-one article, and 12 that need 2-3 articles.
+100 questions with a reference answer and evidence, written by reading the handbook rather than by running the
+search ([evals/README.md](evals/README.md)):
+
+- **40 dev questions:** used to choose methods (reranker, k, cutoffs).
+- **60 held-out questions:** written afterwards and used only in the final face-off. 10 of these are questions the
+  handbook doesn't cover. The held-out questions, and every system's settings, were committed to git before any
+  system answered them.
+
+The tables below come from three notebooks: retrieval (08, dev questions), the face-off (12, held-out questions), and
+the earlier end-to-end run (11, dev questions).
 
 **Retrieval** ([notebook 08](notebooks/08_retrieval_eval.ipynb)). Chunk recall is the share of the chunks that
 answer the question that end up in the top k:
@@ -120,33 +128,40 @@ answer the question that end up in the top k:
 | dense + BM25 fused | 0.67 | 0.78 | 0.07 s |
 | **fused + MiniLM reranker** | **0.73** | **0.85** | 2.9 s |
 
-**End to end** ([notebook 11](notebooks/11_final_comparison.ipynb)). Real API runs, with Sonnet 5.5 answering and
-Opus 5.5 judging:
+**Final face-off on the 60 held-out questions** ([notebook 12](notebooks/12_final_faceoff.ipynb)). Real API runs,
+with Sonnet 5.5 answering and Opus 5.5 judging:
 
-| | Simple RAG | Dynamic RAG | Whole handbook |
-|---|---|---|---|
-| citations verified correct | 99.5% | 99.0% | 98.5% |
-| correctness | 0.96 | 0.95 | 0.99 |
-| completeness | 0.86 | 0.83 | 0.94 |
-| groundedness | 0.96 | 0.95 | 0.90 |
-| fully right (all four) | **72.5%** | 67.5% | 65% |
-| cost for 40 answers | $0.97 | $0.94 | $7.33 |
+| | RAG top 10 | RAG top 15 | RAG dynamic, no cap (−3.68) | Whole handbook |
+|---|---|---|---|---|
+| chunk recall of the context | 0.80 | 0.85 | 0.81 | 1.0 |
+| citations verified correct | 100% | 100% | 99.5% | 98.4% |
+| correctness | 0.98 | 0.98 | 0.98 | 1.00 |
+| completeness | 0.87 | 0.88 | 0.87 | **0.98** |
+| groundedness | 0.97 | 0.96 | **0.98** | 0.91 |
+| fully right (all four) | 75% | 77% | 77% | 75% |
+| not-covered questions declined (of 10) | 10 | 10 | 10 | 10 |
+| cost / question | **$0.023** | $0.032 | $0.024 | $0.166 |
+| median answer time | 3.8 s | 3.8 s | 3.4 s | 7.9 s |
 
 What the results show:
 
-- **Simple RAG** gives the most fully right answers, at a fraction of the cost.
-- **The whole handbook** finds more of the answer when it's spread across articles (multi-article completeness 0.92
-  against 0.71), but adds small unsupported details more often.
-- **The dynamic cutoff** was chosen and frozen before this comparison (notebooks 09-09b). It doesn't beat a fixed
-  top 10.
-- **Sample size:** with 40 questions, differences of one to three questions are within noise.
+- **Fully right is a tie.** All four land at 75-77%, and the 95% intervals for every difference include zero.
+- **The whole handbook is reliably more complete.** It scores 0.98 against 0.87, a gap whose interval excludes zero,
+  and the gain is largest on reworded questions, which retrieval misses. But it adds more small unsupported details,
+  costs about 7 times as much and is twice as slow.
+- **More context doesn't help RAG much.** Top 15 and the uncapped cutoff find a little more evidence but give almost
+  the same answers.
+- **Recommendation:** keep RAG top 10 as the default. Improving retrieval for reworded questions is the next lever.
+- **On the 40 dev questions** ([notebook 11](notebooks/11_final_comparison.ipynb)) the earlier comparison had RAG
+  top 10 at 72.5% fully right, the frozen 3-15 dynamic cutoff at 67.5%, and the whole handbook at 65%.
 
 ## The notebooks
 
 Each pipeline stage has a notebook that runs the real package code, saved with its outputs. Open them in VS Code or
 Jupyter with the `.venv` kernel. To re-run them, install `notebooks/requirements.txt` and run
 `python -m ipykernel install --user --name paradigm-handbook`. By default they reuse saved results. `REBUILD = True`
-redoes an expensive step, and `RUN_API = True` (notebooks 03, 10 and 11) calls the Claude API.
+redoes an expensive step, and `RUN_API = True` (notebooks 03, 10 and 11) calls the Claude API. Notebook 12 only reads
+saved results; the face-off itself runs with `python -m handbook_qa.compare answer|judge <systems>`.
 
 | notebook | what it shows |
 |---|---|
@@ -161,7 +176,8 @@ redoes an expensive step, and `RUN_API = True` (notebooks 03, 10 and 11) calls t
 | [09](notebooks/09_dynamic_selection.ipynb) / [09b](notebooks/09b_dynamic_selection_50.ipynb) Dynamic selection | Score cutoff vs fixed top k, cross-validated; the frozen cutoff. |
 | [09c Dynamic, no cap](notebooks/09c_dynamic_no_cap.ipynb) | The same cutoffs without the 15-chunk cap: slightly higher recall, far more tokens. |
 | [10 Answering](notebooks/10_answering.ipynb) | Answers with citations, citation checks (with a negative control), judging. |
-| [11 Final comparison](notebooks/11_final_comparison.ipynb) | The three systems end to end, with cost and latency. |
+| [11 Comparison on dev](notebooks/11_final_comparison.ipynb) | Three systems end to end on the 40 dev questions, with cost and latency. |
+| [12 Final face-off](notebooks/12_final_faceoff.ipynb) | Four systems on the 60 held-out questions (incl. 10 not covered), with bootstrap intervals. |
 
 ## Repository layout
 
@@ -200,8 +216,9 @@ Run the tests with `pytest`. One test reads the real PDF and is skipped if it ha
 - **Garbled dollar amounts.** Two places render dollar amounts as run-together maths text (pages 21 and 593).
 - **Image descriptions** were written by Claude Code subagents (Sonnet) from the exact prompt the API pipeline uses,
   before an API key was connected. `python -m handbook_qa.ingest describe --force` regenerates them through the API.
-- **The eval set** has 40 questions, and the same questions were used to pick settings (reranker model, cutoff). A
-  held-out set would give a less optimistic estimate. The judge is a model too; its verdicts were spot-checked.
+- **The eval set:** the 40 dev questions were used to pick settings, so scores on them are optimistic. The headline
+  results come from the 60 held-out questions, which still give wide intervals: each question is 1.7 points. The
+  judge is a model too; its verdicts were spot-checked, not all reviewed by a person.
 - **Token counts** for chunk sizes use tiktoken's cl100k as a proxy. Claude's own count is higher; the whole
   handbook is 673k Claude tokens.
 - **Local models run on the CPU.** Reranking takes about 3 s per question on a laptop.
