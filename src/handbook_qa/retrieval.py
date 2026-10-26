@@ -91,6 +91,28 @@ class Hit:
     rerank_score: float | None = None  # cross-encoder score; None when reranking is off
 
 
+@dataclass(frozen=True)
+class DynamicSelection:
+    """Keep reranked candidates scoring at least `cutoff`, but no fewer than `min_keep` and no more than `max_keep`.
+    The values come from `evals/frozen_dynamic_selection.json` (chosen in notebook 09b, frozen before the final
+    comparison)."""
+    cutoff: float
+    candidates: int
+    min_keep: int
+    max_keep: int
+    model: str
+
+    @classmethod
+    def load(cls, path: Path) -> "DynamicSelection":
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        return cls(float(raw["cutoff"]), int(raw["candidates_reranked"]), int(raw["min_kept"]),
+                   int(raw["max_kept"]), raw["model"])
+
+    def count(self, scores_best_first: list[float]) -> int:
+        passing = sum(score >= self.cutoff for score in scores_best_first)
+        return max(self.min_keep, min(self.max_keep, passing))
+
+
 class Reranker:
     """Local cross-encoder (ONNX via fastembed, CPU)."""
 
@@ -202,3 +224,15 @@ class Retriever:
         for hit, score in zip(hits, scores):
             hit.rerank_score = float(score)
         return sorted(hits, key=lambda hit: -hit.rerank_score)[:k or self.rerank_top_n]
+
+    def search_dynamic(self, query: str, selection: DynamicSelection) -> list[Hit]:
+        """Rerank `selection.candidates` fused results and keep those passing the frozen cutoff (clamped)."""
+        if self.reranker is None or self.reranker.model_name != selection.model:
+            raise RuntimeError(f"The cutoff was tuned for {selection.model}; load that reranker to use it")
+        saved = self.rerank_candidates
+        self.rerank_candidates = selection.candidates
+        try:
+            ranked = self.search(query, k=selection.candidates, rerank=True)
+        finally:
+            self.rerank_candidates = saved
+        return ranked[:selection.count([hit.rerank_score for hit in ranked])]

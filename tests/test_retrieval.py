@@ -99,3 +99,33 @@ def test_embed_items_only_embeds_new_or_changed_text(tmp_path, monkeypatch):
     assert store.ids == ["a", "b", "d"]  # "c" dropped, order follows the items
     assert store.hashes[1] == text_hash("beta changed")
     assert store.vectors.shape == (3, 3)
+
+
+def test_dynamic_selection_keeps_passing_candidates_within_the_clamp(tmp_path):
+    from handbook_qa.retrieval import DynamicSelection
+
+    sel = DynamicSelection(cutoff=1.0, candidates=8, min_keep=3, max_keep=5, model="fake")
+    assert sel.count([3, 2, 1, 0, -1]) == 3        # three pass
+    assert sel.count([0.5, 0.2]) == 3              # none pass: floor of 3
+    assert sel.count([9] * 8) == 5                 # all pass: cap of 5
+
+    path = tmp_path / "frozen.json"
+    path.write_text('{"cutoff": -3.5, "candidates_reranked": 50, "min_kept": 3, "max_kept": 15, '
+                    '"model": "Xenova/ms-marco-MiniLM-L-6-v2", "rule": "..."}')
+    assert DynamicSelection.load(path) == DynamicSelection(-3.5, 50, 3, 15, "Xenova/ms-marco-MiniLM-L-6-v2")
+
+
+def test_search_dynamic_uses_frozen_settings_and_checks_the_model():
+    from handbook_qa.retrieval import DynamicSelection
+
+    retriever = reranking_retriever()
+    retriever.reranker.model_name = "fake"
+    hits = retriever.search_dynamic("question", DynamicSelection(1.0, 8, 1, 5, "fake"))
+    assert [h.item.id for h in hits] == ["c6", "c7"]          # only the two "answer" docs score >= 1
+    assert retriever.rerank_candidates == 8                    # restored afterwards
+
+    try:
+        retriever.search_dynamic("question", DynamicSelection(1.0, 8, 1, 5, "another-model"))
+        raise AssertionError("expected a model mismatch error")
+    except RuntimeError as error:
+        assert "tuned for another-model" in str(error)
