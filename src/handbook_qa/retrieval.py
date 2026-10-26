@@ -28,11 +28,7 @@ from .config import Settings
 from .embeddings import VectorStore
 
 TOKEN_RE = re.compile(r"[a-z0-9]+(?:['’.][a-z0-9]+)*")
-STOPWORDS = frozenset("""
-a an and are as at be but by can do does for from has have how i if in into is it its me my of on or our so
-than that the their them then there these they this to us was we were what when where which who why will with
-you your
-""".split())
+STOPWORDS = frozenset(["a", "an", "and", "are", "as", "at", "be", "but", "by", "can", "do", "does", "for", "from", "has", "have", "how", "i", "if", "in", "into", "is", "it", "its", "me", "my", "of", "on", "or", "our", "so", "than", "that", "the", "their", "them", "then", "there", "these", "they", "this", "to", "us", "was", "we", "were", "what", "when", "where", "which", "who", "why", "will", "with", "you", "your"])
 
 
 def tokenize(text: str) -> list[str]:
@@ -103,7 +99,7 @@ class DynamicSelection:
     model: str
 
     @classmethod
-    def load(cls, path: Path) -> "DynamicSelection":
+    def load(cls, path: Path) -> DynamicSelection:
         raw = json.loads(path.read_text(encoding="utf-8"))
         return cls(float(raw["cutoff"]), int(raw["candidates_reranked"]), int(raw["min_kept"]),
                    int(raw["max_kept"]), raw["model"])
@@ -117,7 +113,9 @@ class Reranker:
     """Local cross-encoder (ONNX via fastembed, CPU)."""
 
     def __init__(self, model_name: str, cache_dir: Path, threads: int, batch_size: int = 8) -> None:
-        from fastembed.rerank.cross_encoder import TextCrossEncoder  # heavy import; only when reranking
+        from fastembed.rerank.cross_encoder import (
+            TextCrossEncoder,  # heavy import; only when reranking
+        )
 
         self.model_name, self.batch_size = model_name, batch_size
         self.model = TextCrossEncoder(model_name, cache_dir=str(cache_dir), threads=threads,
@@ -171,7 +169,7 @@ class Retriever:
         self.bm25 = BM25([tokenize(item.text) for item in self.items])
 
     @classmethod
-    def from_settings(cls, settings: Settings, embed_query=None, reranker: Reranker | None = None) -> "Retriever":
+    def from_settings(cls, settings: Settings, embed_query=None, reranker: Reranker | None = None) -> Retriever:
         items = load_corpus(settings.paths.chunks, settings.paths.image_index)
         store = VectorStore.load(settings.paths.vectors)
         missing = [item.id for item in items if item.id not in store.lookup()]

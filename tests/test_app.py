@@ -5,7 +5,15 @@ import anthropic
 import httpx2
 
 from handbook_qa.answer import Citation, HandbookAnswer
-from handbook_qa.app import EXPLANATION, App, Reply, check_key, get_api_key, render_reply, setup_help
+from handbook_qa.app import (
+    EXPLANATION,
+    App,
+    Reply,
+    check_key,
+    get_api_key,
+    render_reply,
+    setup_help,
+)
 
 
 def make_reply(coverage="full", ok=True, in_excerpt=True):

@@ -12,11 +12,11 @@ from __future__ import annotations
 import json
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
 
-from .retrieval import Item, Retriever, reciprocal_rank_fusion
+from .retrieval import Item, Retriever
 
 QUOTE_CHARS = str.maketrans({"’": "'", "‘": "'", "“": '"', "”": '"', "–": "-", "—": "-", " ": " "})
 
@@ -70,9 +70,7 @@ def resolve(questions: list[EvalQuestion], items: list[Item]) -> list[str]:
             for item, text in normalised:
                 if quote not in text:
                     continue
-                if item.kind == "chunk" and item.record["article_path"] == ev.article:
-                    ev.targets.add(item.id)
-                elif item.kind == "image" and any(o["article_path"] == ev.article for o in item.record["occurrences"]):
+                if item.kind == "chunk" and item.record["article_path"] == ev.article or item.kind == "image" and any(o["article_path"] == ev.article for o in item.record["occurrences"]):
                     ev.targets.add(item.id)
             if not any(t for t in ev.targets if "#" in t):
                 problems.append(f"{q.id}: quote not found in any chunk of {ev.article}: {ev.quote[:70]}")

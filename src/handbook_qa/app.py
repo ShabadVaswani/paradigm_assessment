@@ -21,15 +21,15 @@ import sys
 import textwrap
 import time
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")  # keep model loading quiet
 os.environ.setdefault("TQDM_DISABLE", "1")
 
-import anthropic  # noqa: E402
+import anthropic
 
-from .config import ROOT, Settings, load_settings  # noqa: E402
+from .config import ROOT, Settings, load_settings
 
 MODES = {"1": "simple", "2": "dynamic", "3": "whole"}
 MODE_NAMES = {"simple": "Simple RAG", "dynamic": "Dynamic RAG", "whole": "Whole handbook"}

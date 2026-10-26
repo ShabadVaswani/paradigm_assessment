@@ -1,4 +1,11 @@
-from handbook_qa.evaluation import EvalQuestion, Evidence, chunk_recall, expected_chunks, normalise, resolve
+from handbook_qa.evaluation import (
+    EvalQuestion,
+    Evidence,
+    chunk_recall,
+    expected_chunks,
+    normalise,
+    resolve,
+)
 from handbook_qa.retrieval import Item
 
 ITEMS = [

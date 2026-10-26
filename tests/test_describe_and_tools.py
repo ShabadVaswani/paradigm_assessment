@@ -5,7 +5,12 @@ from types import SimpleNamespace
 import pytest
 
 from handbook_qa.config import LLMSettings
-from handbook_qa.describe import DescriptionError, ImageDescription, build_prompt, describe_one
+from handbook_qa.describe import (
+    DescriptionError,
+    ImageDescription,
+    build_prompt,
+    describe_one,
+)
 from handbook_qa.images import ImageRecord, Occurrence
 from handbook_qa.tools import ImageStore, run_get_image
 

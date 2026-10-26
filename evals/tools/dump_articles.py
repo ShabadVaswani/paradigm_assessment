@@ -2,7 +2,6 @@
 areas with an index per area. Eval authors read these files instead of the app's chunks or search.
 Usage (from the repo root): .venv/Scripts/python.exe evals/tools/dump_articles.py data/build/eval_reading
 """
-import json
 import sys
 from pathlib import Path
 

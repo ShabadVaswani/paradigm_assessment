@@ -1,4 +1,4 @@
-from handbook_qa.chunking import chunk_article, split_block, Block, split_sentences
+from handbook_qa.chunking import Block, chunk_article, split_block, split_sentences
 from handbook_qa.config import ChunkSettings
 from handbook_qa.images import ImageRecord, Occurrence
 from handbook_qa.pdf_extract import Article, Element

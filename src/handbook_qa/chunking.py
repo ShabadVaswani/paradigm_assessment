@@ -19,8 +19,8 @@ import json
 import re
 from dataclasses import asdict, dataclass, field
 
-from .config import ChunkSettings, Settings, ROOT
-from .describe import load_cache, is_current
+from .config import ChunkSettings, Settings
+from .describe import is_current, load_cache
 from .images import ImageRecord, load_image_index, save_image_index
 from .pdf_extract import Article, load_articles
 from .tokens import count_tokens

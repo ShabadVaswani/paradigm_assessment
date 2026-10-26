@@ -23,12 +23,17 @@ from . import evaluation as ev
 from .answer import AnswerResult, HandbookAnswer, answer_question, build_user_message
 from .citations import PageIndex, check_citations
 from .config import ROOT, Settings, load_settings
-from .full_context import answer_full_context, article_items, cited_articles_message, handbook_document
+from .full_context import (
+    answer_full_context,
+    article_items,
+    cited_articles_message,
+    handbook_document,
+)
 from .images import load_image_index
 from .judge import judge_one
 from .llm import client as make_client
 from .pdf_extract import load_articles
-from .retrieval import DynamicSelection, Hit, Item, Retriever, load_corpus
+from .retrieval import DynamicSelection, Hit, Retriever, load_corpus
 from .tools import ImageStore
 
 log = logging.getLogger("handbook_qa.compare")

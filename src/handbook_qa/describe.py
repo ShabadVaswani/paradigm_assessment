@@ -13,7 +13,7 @@ import asyncio
 import base64
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
@@ -125,7 +125,7 @@ def _cache_entry(record: ImageRecord, description: ImageDescription, source: str
         "prompt_version": PROMPT_VERSION,
         "source": source,
         "model": model,
-        "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
         **description.model_dump(),
     }
 

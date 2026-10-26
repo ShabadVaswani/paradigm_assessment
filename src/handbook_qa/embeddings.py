@@ -14,9 +14,9 @@ import hashlib
 import logging
 import os
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 import numpy as np
 
@@ -62,11 +62,11 @@ class VectorStore:
     vectors: np.ndarray  # (n, 768) float32, L2-normalised
 
     @classmethod
-    def empty(cls) -> "VectorStore":
+    def empty(cls) -> VectorStore:
         return cls([], [], np.zeros((0, DIMENSIONS), dtype=np.float32))
 
     @classmethod
-    def load(cls, path: Path) -> "VectorStore":
+    def load(cls, path: Path) -> VectorStore:
         if not path.exists():
             return cls.empty()
         with np.load(path, allow_pickle=False) as data:

@@ -2,7 +2,13 @@ import numpy as np
 
 from handbook_qa.config import EmbedSettings
 from handbook_qa.embeddings import VectorStore, embed_items, text_hash
-from handbook_qa.retrieval import BM25, Item, Retriever, reciprocal_rank_fusion, tokenize
+from handbook_qa.retrieval import (
+    BM25,
+    Item,
+    Retriever,
+    reciprocal_rank_fusion,
+    tokenize,
+)
 
 
 def test_tokenize_drops_stopwords_and_plurals():

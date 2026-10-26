@@ -1,7 +1,12 @@
 from pathlib import Path
 from types import SimpleNamespace
 
-from handbook_qa.answer import Citation, HandbookAnswer, answer_question, build_user_message
+from handbook_qa.answer import (
+    Citation,
+    HandbookAnswer,
+    answer_question,
+    build_user_message,
+)
 from handbook_qa.citations import PageIndex, check_citations, excerpt_with_pages
 from handbook_qa.config import AnswerSettings
 from handbook_qa.pdf_extract import Article, Element
@@ -103,7 +108,8 @@ def test_judge_message_and_request(monkeypatch):
     from handbook_qa.answer import AnswerResult
     from handbook_qa.config import JudgeSettings
     from handbook_qa.evaluation import EvalQuestion, Evidence
-    from handbook_qa.judge import Judgement, build_user_message as judge_message, judge_one
+    from handbook_qa.judge import Judgement, judge_one
+    from handbook_qa.judge import build_user_message as judge_message
 
     q = EvalQuestion("T-1", "Laptop budget?", "existing", "Up to $1,000 without asking.",
                      [Evidence(PATH, "You can spend up to $1,000 on a laptop without asking.")])
@@ -132,7 +138,12 @@ def test_default_models():
 
 
 def test_full_context_caches_the_handbook_and_checks_citations_against_articles():
-    from handbook_qa.full_context import article_items, handbook_document, answer_full_context, user_content
+    from handbook_qa.full_context import (
+        answer_full_context,
+        article_items,
+        handbook_document,
+        user_content,
+    )
 
     items = article_items([ARTICLE], {})
     assert [i.id for i in items] == ["people/spending"]
