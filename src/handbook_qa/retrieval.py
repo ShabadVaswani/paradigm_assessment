@@ -165,6 +165,16 @@ class Retriever:
         return cls(items, store.matrix_for([item.id for item in items]), embed_query, r.candidates, r.rrf_k,
                    reranker, r.rerank, r.rerank_candidates, r.rerank_top_n)
 
+    def dense_order(self, query: str, limit: int) -> tuple[list[int], np.ndarray]:
+        """Item indices by cosine similarity (best first), and all the scores."""
+        scores = self.vectors @ self.embed_query(query)
+        return rank_order(scores + 2.0, limit), scores  # +2 so negative cosines still count as candidates
+
+    def bm25_order(self, query: str, limit: int) -> tuple[list[int], np.ndarray]:
+        """Item indices by BM25 score (best first; items sharing no term are left out), and all the scores."""
+        scores = self.bm25.scores(tokenize(query))
+        return rank_order(scores, limit), scores
+
     def search(self, query: str, k: int | None = None, rerank: bool | None = None) -> list[Hit]:
         """Top results for `query`.
 
@@ -175,11 +185,8 @@ class Retriever:
         if rerank and self.reranker is None:
             raise RuntimeError("Reranking requested but no reranker is loaded (RERANK=off at startup?)")
 
-        dense_scores = self.vectors @ self.embed_query(query)
-        bm25_scores = self.bm25.scores(tokenize(query))
-        # Cosine scores can be negative; shift so rank_order keeps every candidate.
-        dense = rank_order(dense_scores + 2.0, self.candidates)
-        lexical = rank_order(bm25_scores, self.candidates)
+        dense, dense_scores = self.dense_order(query, self.candidates)
+        lexical, bm25_scores = self.bm25_order(query, self.candidates)
         fused = reciprocal_rank_fusion([dense, lexical], self.rrf_k)
         dense_rank = {index: rank for rank, index in enumerate(dense, start=1)}
         bm25_rank = {index: rank for rank, index in enumerate(lexical, start=1)}
