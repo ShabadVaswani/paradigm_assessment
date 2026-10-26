@@ -160,3 +160,55 @@ Turn the handbook PDF into retrieval data: chunks of a sensible size that follow
   - the YC eligibility text contradicts itself (the table says under $25m raised, the paragraph above says any amount);
   - the ramp diagram's quarter labels are a little inconsistent;
   - a few useful sentences appear word for word in two articles, so they couldn't be used as unique evidence.
+
+## Continued (2026-10-25): dynamic selection experiment, answering, citation checks, judging
+
+### Key prompts
+
+> use a subagent in its own git worktree to explore dynamic selection after reranking, keep the chunks above a score cutoff with atleast 3 and atmost 15, compare it with top5/10 on the 40 questions, don't change main code, and create a notebook for it as well, cutoff should be tuned on these 40
+> meanwhile you move on using top 10 using claude to answer the questions, it can call get image too when required, it should clearly say when handbook doesn't cover the information, answer only from retrieved chunks and it should also quote exact text/page number, check if the cited information actually appears or not, use notebook for this too
+
+> use sonnet 5.5 for all answering opus 5.5 for judging
+
+### What the AI did / proposed
+
+- **Dynamic selection.** Launched an Opus subagent in its own git worktree to run the experiment.
+  - Because the worktree has no `data/` folder, it was told to link to the main repo's data read-only, and to put the worktree's `src` first on the import path.
+  - It produced `notebooks/09_dynamic_selection.ipynb` on its branch, with one commit. It also added a 5-fold cross-validated estimate next to the in-sample one.
+  - It recommended against adopting the method (decision 16).
+  - The AI checked the result itself: the branch adds only the notebook, nothing under `src/` changed, the notebook ran without errors, and it imported the worktree's copy of the code.
+- **No API credentials.** The AI checked for credentials and found none: no API key, no Key Vault URL, no `ant` login. So it built the API path and tested it with a fake client, and ran the 40 questions through Claude Code subagents instead. They got the exact prompts the API would get: 4 Sonnet answering agents, then 2 Opus judging agents, after I specified the models mid-task.
+- **New code:**
+  - `citations.py`: page lookup from the PDF elements, `[page N]` markers in excerpts, and the citation checks.
+  - `answer.py`: the system prompt, a structured answer, a manual tool loop with `get_image` restricted to images in the retrieved excerpts, and a task path for running without the API.
+  - `judge.py`: a 5-dimension rubric with the reference answer and the citation checks as input.
+  - A command-line `get_image` for the stand-in agents.
+  - Tests with a fake client.
+  - `.claude/worktrees/` added to `.gitignore`.
+- **Results** (decision 15):
+  - **Citations:** all 196 correct, and a negative control on the real answers shows the check catches altered quotes, pages and excerpt ids.
+  - **Judge:** 39 of 40 answers correct and 30 complete. Of the 10 incomplete ones, 7 are retrieval misses and 3 are answering omissions.
+  - **Coverage labels:** one answer (C1-09) overclaimed coverage.
+  - **Images:** the answering model never fetched an image.
+
+### Accepted / rejected
+
+- I specified the worktree experiment, top 10, the answering rules, citation checking, and the models: Sonnet 5.5 to answer, Opus 5.5 to judge.
+- The AI's choices, which I haven't commented on yet:
+  - the structured answer format and the judging rubric;
+  - running stand-in subagents because there was no key;
+  - restricting `get_image` to retrieved images;
+  - the negative control.
+- I haven't decided on dynamic selection yet; the recommendation is not to adopt it.
+
+### What the AI got wrong, and how it was caught
+
+- **Answering-model default.** It first set the answering default to Opus 5.5, following the Claude API skill's default. I said Sonnet 5.5 for answering and Opus 5.5 for judging, and it changed the config. No answers had been produced with the wrong model.
+- **A syntax error.** The judge's message builder used a nested f-string with the same quote style, which Python 3.11 rejects. The new test failed on it, and the AI fixed it.
+- **A failed shell command.** One command meant to append these notes failed to parse, because of a heredoc problem in the shell. Nothing was written; the AI checked the files were unchanged and appended the notes another way.
+- **Answers not tested against the real API.** Answers and judgements come from stand-in subagents, not the API models. Some agents adapted their behaviour to the stand-in setup: one avoided quotes with curly apostrophes to dodge matching problems. Results may shift when the real API runs.
+- **Points raised by the judges** (to review, not yet acted on):
+  - C1-09's coverage label contradicts its own answer.
+  - The handbook gives two different rules for extending startup credits, and the reference answer for C1-08 names only one.
+  - The handbook is inconsistent about when someone is switched back into lead assignment after time off (C1-07).
+  - B-06's reference includes a $20 tier for async feedback that doesn't apply to someone who just finished a call.
