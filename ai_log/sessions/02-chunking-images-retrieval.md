@@ -122,3 +122,41 @@ Turn the handbook PDF into retrieval data: chunks of a sensible size that follow
 - **Reranker default picked before measuring.** The AI set jina turbo as the default on paper (it reads whole chunks); in the comparison it ranked lowest.
 - **Spot-check too narrow for image answers.** The first comparison counted only the image record as the answer for image-only facts. That made both 8K rerankers look as if they had lost the logo answer, when they had returned the chunk containing that image's description. The AI noticed while checking which question each model missed. It widened the expectations (image record or its chunk), reran, and noted this in the notebook.
 - **A command that hung.** One build command contained a stray bare `python` call, which waited for input and blocked the step. The AI stopped it after the 10-minute timeout, checked no orphaned processes were left, and redid the edit with the edit tool.
+
+## Continued (2026-10-25): a 40-question retrieval eval
+
+### Key prompt
+
+> 11 questions is not enough, also rank 1 is not a good measure, build 40 retrieval questions, 11 we have plus new 29 with reworded, multi chunk spanning 2-3 articles and or sections, read the handbook to get questions and to build answer key and don't do it by running search, score by fraction of expected chunks found, compare in one table dense only, bm25 only, merged without reranker, with reranker but don't use bge this time as its too slow. also include time per question, these 40 will also become part of final eval set
+
+### What the AI did / proposed
+
+- **Reading material.** Wrote every article as plain text, exactly as the chunks render it, split into four areas with an index each (`evals/tools/dump_articles.py`). Also wrote a validator that checks each quote is verbatim, on one line, 6-30 words and unique in the handbook (`evals/tools/validate_draft.py`).
+- **Drafting.** Ran four Opus subagents in parallel, one per area (Opus because writing eval questions takes judgment). Each read its area's articles and wrote questions with an answer and verbatim evidence quotes. They were told not to read the app's code, chunks or vectors. All four passed the validator.
+- **Review.** Read all 40 questions, answers and quotes, and resolved every quote to its chunk(s) by string matching. Then:
+  - Replaced A-09: it was labelled multi-section, but both sections were in one chunk. The replacement uses 3 sections of the small-teams article.
+  - Switched the metric from quotes to distinct chunks, which is what I had asked for. The first version had counted quotes.
+- **Code.**
+  - Added `src/handbook_qa/evaluation.py`: quote-to-chunk resolution, chunk recall@k, and the methods compared.
+  - Refactored `Retriever` so dense-only and BM25-only rankings can be called on their own.
+  - Added tests.
+  - Saved the set as `evals/handbook_eval.jsonl`, with `evals/README.md` and the build tools in `evals/tools/`.
+- **Notebook 08.** Compared five methods at k = 5 and 10, with time per question (decision 14 has the table).
+  - Fused + MiniLM is best: chunk recall 0.73 at 5 and 0.85 at 10, for about 2.8 s per question.
+  - Fused without reranking: 0.67 and 0.78.
+  - On reworded questions, dense only does worst. Multi-article questions are the weakest for every method.
+
+### Accepted / rejected
+
+- I set the size and mix of the set, required building it by reading, picked the metric and the methods to compare, and excluded bge.
+- The AI chose the quote-based key, subagents per area, the validator, k = 5/10, and replacing A-09. I haven't commented on those yet.
+
+### What the AI got wrong, and how it was caught
+
+- **Metric.** It first scored by the fraction of evidence quotes found, not of chunks as I'd specified. It caught this while reviewing the key, when it saw one question with 7 quotes all in one chunk. It fixed this before any results were produced.
+- **A-09.** One subagent question was labelled multi-section but all its evidence sat in a single chunk. The AI caught it in review, when counting expected chunks per question, and replaced it.
+- **Tools script.** A script for moving the eval tools into the repo failed on a Windows path escape, and its follow-up check printed "DIFFERENT" against a file that had never been written. The AI read the output, redid the edits with the edit tool, and confirmed the moved tools rebuild a byte-identical eval file.
+- **Handbook quirks the subagents flagged** (data, not the AI's mistakes, but they affect the key):
+  - the YC eligibility text contradicts itself (the table says under $25m raised, the paragraph above says any amount);
+  - the ramp diagram's quarter labels are a little inconsistent;
+  - a few useful sentences appear word for word in two articles, so they couldn't be used as unique evidence.
