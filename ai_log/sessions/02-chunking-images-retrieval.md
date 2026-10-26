@@ -212,3 +212,54 @@ Turn the handbook PDF into retrieval data: chunks of a sensible size that follow
   - The handbook gives two different rules for extending startup credits, and the reference answer for C1-08 names only one.
   - The handbook is inconsistent about when someone is switched back into lead assignment after time off (C1-07).
   - B-06's reference includes a $20 tier for async feedback that doesn't apply to someone who just finished a call.
+
+## Continued (2026-10-25): frozen dynamic cutoff, API key, final three-system comparison
+
+### Key prompts
+
+> Use a subagent to extend the dynamic selection experiment. For it, re-rank the top 50 candidates . check range of score cutoffs both lower and higher than -3.68. Compare against fixed top k at same average number of chunks wherever it makes sense. Not everywhere. Report recall versus average chunks. As a curve for both, cross-validated on 40 questions. Pick the best cutoff. It should be included in final comparison. As a third system, with rag with top 10 And the whole handbook baseline. So three systems, the frozen cutoff should not be changed after seeing the final results.
+
+> add .env to gitignore and I will add it then
+
+My answers to the AI's questions:
+- Whole-handbook baseline: "Wait for the API key".
+- Once the key worked: run "All three via API".
+- Image re-description through the API: "Not now".
+
+### What the AI did / proposed
+
+- **The experiment.** Launched an Opus subagent in its own worktree, with the selection rule specified up front: the highest recall with mean chunks ≤ 10. Results are in decision 17.
+  - The AI checked the branch itself: only the frozen file and the notebooks, no `src/` changes, no notebook errors.
+  - It committed the frozen file to main on its own before anything else.
+  - It confirmed the main pipeline reproduces the experiment's numbers exactly.
+- **Whole-handbook system** (`full_context.py`).
+  - Refactored `answer.py` so all systems share one answer loop; RAG prompts stayed byte-identical, which the AI checked.
+  - The handbook is 443k tokens by the cl100k count and 673k as Claude counts it.
+  - It's prompt-cached between questions and tested with a fake client.
+- **Dynamic mode in the main pipeline** (`DynamicSelection`). It reads its settings only from the frozen file and refuses to run if the loaded reranker differs from the one the cutoff was tuned for.
+- **`.env` support.**
+  - `.env` added to `.gitignore`, a committed `.env.example`, and a small loader in `config.py`. Shell variables take precedence, and empty values are skipped so a blank key doesn't block authentication.
+  - When I put the real key into `.env.example` (a tracked file) by mistake, the AI caught it from the file change. Before anything was committed, it moved the key to the gitignored `.env` and restored `.env.example`, then told me. It also noted the key had passed through the session, in case I want to rotate it.
+- **The real API.**
+  - Checked the key with a free models lookup: both models available, 1M context.
+  - Stopped the four stand-in answering agents it had just started, then asked me how to run the comparison, with real token counts and a cost estimate.
+  - Smoke-tested one answer and one judgement through the API before the full runs.
+- **The runs.** A resumable runner (`compare.py`) ran detached from the Claude session, with timestamped logs and monitors on errors and completion. All 120 answers and 120 judgements finished with no errors in about 11 minutes, for about $14.60.
+- **Notebook 11.** Compares the three systems, checks the freeze order from git, reports cost and latency, and measures how well the earlier stand-ins matched the API (87.5-97.5% verdict agreement).
+
+### Accepted / rejected
+
+- I designed the experiment and the three-system comparison, chose to wait for the key, then to run everything through the API, and declined the image re-run for now.
+- The AI's additions, which I haven't commented on yet:
+  - the mean-chunks ≤ 10 budget in the selection rule;
+  - committing the frozen file before any answers, and asserting that order;
+  - the `.env` loader;
+  - moving my key out of `.env.example`.
+
+### What the AI got wrong, and how it was caught
+
+- **A `.env.example` that would have broken the loader.** The first version put comments after values on the same line, and the loader would have read them as part of the value. Blank values would also have been set as empty strings, and an empty `ANTHROPIC_API_KEY` counts as a set key for the SDK. The AI noticed both while writing the loader and fixed them before I filled anything in, with tests.
+- **A stray placeholder line in a test** (`record = ImageRecord_stub = None`). The AI removed it.
+- **Token estimates.** Its earlier cl100k figure for the whole handbook (443k) understated the real Claude count (673k) by 52%. The cost estimate it gave me used the real count from the API's token counter.
+- **A stand-in run that got thrown away.** The AI launched the four stand-in agents for the dynamic system before you added the key, then stopped them minutes later once the key worked. Their partial output was not used.
+- **The experiment agent noted** that its tie-break puts the cutoff at the edge of a plateau, so small changes would lower recall. The cutoff stayed frozen regardless.
