@@ -502,3 +502,32 @@ My answers to the AI's questions:
 
 - **What the AI got wrong:** it added a status line to quick replies, and the guard's time to the footer of normal answers. I hadn't asked for either, and I had already asked for banners to be removed (decision 25).
 - **Fix:** both are removed. A quick reply now prints only the reply, and the footer of normal answers is back to what it was before the guard.
+
+## Continued (2026-10-29): signpost comments in the notebooks
+
+### Key prompts
+
+> "can you add At most one signpost per block, and only where a cell does several distinct things. If the markdown above already says what the cell does, there's no signpost. signpost style comments in the code"
+
+### What the AI did / proposed
+
+- **A small tool, kept outside the repo** (in `data/build`, which is gitignored). It exports each notebook as plain text with its markdown cells shown for context. On the way back it accepts only inserted comment lines and refuses anything else, so code and outputs can't change.
+- **The writing:** two Sonnet subagents wrote the signposts in parallel (notebooks 01-08 and 09-12). They worked on the exported text only.
+- **Review:** the main session reviewed every signpost in context and reworded one ("Items by kind" became "Count items by kind").
+- **Result:**
+  - 21 signposts in 12 cells across notebooks 01, 05, 09b, 09c, 10, 11 and 12.
+  - The other notebooks got none: their cells have one purpose each, or their markdown already says what the cell does.
+  - Outputs are unchanged in all 14 notebooks (checked against the last commit).
+- **An edit already in the working copy:** notebook 01 had a change made in the editor (one `execution_count` set to null). The AI kept it out of the commit and left it in the working copy.
+
+### Accepted / rejected
+
+- The rule is mine. The AI's choices, which I haven't commented on yet:
+  - delegating the writing to Sonnet;
+  - the guarded export/apply approach.
+
+### What the AI got wrong, and how it was caught
+
+- **The tool's first version changed line endings.** It wrote files with Python's `write_text`, which on Windows turns LF into CRLF. A no-op round trip then showed 10 notebooks as modified.
+- **The first fix overshot.** Converting everything back to LF flipped four notebooks that were CRLF to begin with.
+- **How it was caught and fixed:** the AI noticed both from `git status` after a run that should have changed nothing. It restored those four from git (their content was identical), and changed the tool to keep each file's own line endings and to leave unchanged notebooks untouched. It then tested the tool on copies of an LF and a CRLF notebook before any real edit.
