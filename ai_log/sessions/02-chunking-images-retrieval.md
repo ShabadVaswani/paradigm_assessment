@@ -531,3 +531,14 @@ My answers to the AI's questions:
 - **The tool's first version changed line endings.** It wrote files with Python's `write_text`, which on Windows turns LF into CRLF. A no-op round trip then showed 10 notebooks as modified.
 - **The first fix overshot.** Converting everything back to LF flipped four notebooks that were CRLF to begin with.
 - **How it was caught and fixed:** the AI noticed both from `git status` after a run that should have changed nothing. It restored those four from git (their content was identical), and changed the tool to keep each file's own line endings and to leave unchanged notebooks untouched. It then tested the tool on copies of an LF and a CRLF notebook before any real edit.
+
+### Follow-up: more signposts
+
+> "can you add more so its easier to read?"
+
+> "still at most one signpost per block, this is not a rule just a guidance"
+
+- **The pass:** two Sonnet subagents added a signpost above most distinct blocks, and above the steps of longer functions. The main session relayed my follow-up to both: one per block is guidance, and a second is fine for a clearly separate step.
+- **Review:** the main session read all of them in context. It reworded four that were vague or inaccurate; for example, "Locate the image on the page" sat above code that extracts the image data, so it became "Image data, position and file name". It removed four that only restated a single line, or repeated the signpost above.
+- **Result:** 312 comment lines across all 14 notebooks. Every code cell still parses (checked by compiling each cell, since a comment after a backslash continuation would break it), and outputs are unchanged. My editor change in notebook 01 was again kept out of the commit.
+- **A scratch-file clash between the subagents:** both used the same scratch file name for their insertion scripts, and the second ran the first's script by mistake. That run failed without editing anything. The main session confirmed this by checking every file's added and removed lines against the clean export: the counts matched the first subagent's report, with no duplicates or removals.
